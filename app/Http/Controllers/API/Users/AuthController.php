@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers\Api\Users;
 
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Cache;
 
 class AuthController extends Controller
 {
+
     // Register a New User
     public function register(Request $request)
     {
@@ -58,6 +59,8 @@ class AuthController extends Controller
             'token' => $token,
         ], 201);
     }
+
+    //verify the Email
     public function verify(Request $request)
     {
         $request->validate([
@@ -91,6 +94,7 @@ class AuthController extends Controller
         return response()->json(['message' => 'Email verified successfully']);
     }
 
+
     public function resendOtp(Request $request)
     {
         $request->validate([
@@ -120,6 +124,7 @@ class AuthController extends Controller
             'message' => 'OTP resent to your email.',
         ]);
     }
+
     // Login User
     public function login(Request $request)
     {
@@ -168,6 +173,8 @@ class AuthController extends Controller
             'expires_in' => JWTAuth::factory()->getTTL() * 60,
         ]);
     }
+
+
     public function sendResetOtp(Request $request)
     {
         $request->validate([
@@ -183,6 +190,8 @@ class AuthController extends Controller
 
         return response()->json(['message' => 'Reset OTP sent to your email']);
     }
+
+
     public function verifyResetOtp(Request $request)
     {
         $request->validate([
@@ -201,6 +210,8 @@ class AuthController extends Controller
 
         return response()->json(['message' => 'OTP verified. You can now reset your password']);
     }
+
+
     public function resetPasswordWithOtp(Request $request)
     {
         $request->validate([

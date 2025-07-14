@@ -2,8 +2,9 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\empAuthController;
+use App\Http\Controllers\Api\Users\AuthController;
+use App\Http\Controllers\Api\employees\empAuthController;
+ use App\Http\Controllers\Api\employees\empProductController;
 
 Route::middleware(['auth:users', 'verified'])->group(function () {
 
@@ -16,66 +17,105 @@ Route::middleware(['auth:users', 'verified'])->group(function () {
 });
 
 
-Route::prefix('auth')->group(function () {
-    Route::controller(AuthController::class)->group(function ()   {
-    Route::post('password/send-otp','sendResetOtp');
-    Route::post('password/verify-otp','verifyResetOtp');
-    Route::post('password/reset','resetPasswordWithOtp');
-    Route::post('verify','verify');
-    Route::post('otp/resend','resendOtp');
-    Route::post('register','register');
-    Route::post('login','login');
+Route::prefix('auth')->controller(AuthController::class)->group(function () {
+
+    // 🔐 استعادة كلمة المرور باستخدام OTP
+    Route::post('password/send-otp',     'sendResetOtp');         // إرسال OTP
+    Route::post('password/verify-otp',   'verifyResetOtp');       // التحقق من OTP
+    Route::post('password/reset',        'resetPasswordWithOtp'); // إعادة تعيين كلمة المرور
+
+    // ✅ التحقق من البريد بعد التسجيل
+    Route::post('verify',      'verify');       // تأكيد OTP
+    Route::post('otp/resend',  'resendOtp');    // إعادة إرسال OTP
+
+    // 📝 تسجيل وحساب جديد
+    Route::post('register', 'register');
+
+    // 🔑 تسجيل دخول
+    Route::post('login', 'login');
+
+    // 🛡️ مسارات محمية بالتوكن
     Route::middleware('auth:users')->group(function () {
-        Route::get('me','me');
-        Route::post('logout','logout');
-        Route::post('refresh','refresh');
+        Route::get('me', 'me');           // جلب بيانات المستخدم
+        Route::post('logout', 'logout'); // تسجيل الخروج
+        Route::post('refresh', 'refresh'); // تجديد التوكن
     });
+
 });
-});
+
 // ====================================================================
 //
 //                              employee
-//Route::middleware(['auth:employee', 'emp.role:admin'])->group(function () {
-//     Route::post('/employees/create', [AdminController::class, 'createEmployee']);
-// });
-
-// Route::middleware(['auth:employee', 'emp.role:store'])->group(function () {
-//     Route::get('/store/orders', [StoreController::class, 'viewOrders']);
-// });
-
-// Route::middleware(['auth:employee', 'emp.role:sales'])->group(function () {
-//     Route::post('/sales/order', [SalesController::class, 'createOrder']);
-// });
-
-// Route::middleware(['auth:employee', 'emp.role:support'])->group(function () {
-//     Route::get('/support/tickets', [SupportController::class, 'listTickets']);
-// });
-
+// emp.role:support ,sales, store, admin
 // ====================================================================
 Route::prefix('employee')->group(function () {
-Route::middleware(['auth:employee'])->group(function () {
-// Route::controller(DiabtesRecord::class)->group(function ()   {
-// Route::get('/records/{id}','showhistory');
-// });
+
+
+    // ✅ فقط المسؤولين (admin)
+    Route::middleware(['auth:employee', 'emp.role:admin'])->group(function () {
+
+
+        Route::prefix('products')->controller(empProductController::class)->group(function () {
+
+            Route::post('/', 'store');                         // إضافة منتج
+            Route::put('/{id}', 'update');                     // تعديل منتج
+            Route::delete('/{id}', 'destroy');                 // حذف منتج
+
+            Route::post('/{id}/add-photos', 'addPhotos');      // رفع صور
+            Route::put('/{id}/main-photo', 'setMainPhoto');    // تحديد صورة رئيسية
+            Route::delete('/{id}/remove-photo', 'removePhoto');// حذف صورة
+
+            Route::get('/{id}', 'show');                       // عرض منتج مفرد
+            Route::get('/', 'index');                          // عرض قائمة المنتجات
+        });
+
+    });
 
 });
-});
 
-Route::prefix('auth/emp')->group(function () {
-    Route::controller(empAuthController::class)->group(function ()   {
-    Route::post('password/send-otp','sendResetOtp');
-    Route::post('password/verify-otp','verifyResetOtp');
-    Route::post('password/reset','resetPassword');
-    Route::post('verify','verify');
-    Route::post('otp/resend','resendOtp');
-    Route::post('login','login');
+Route::prefix('auth/emp')->controller(empAuthController::class)->group(function () {
+
+
+    // 🔐 عمليات استعادة كلمة المرور (OTP عبر البريد)
+    Route::post('password/send-otp',    'sendResetOtp');      // إرسال OTP
+    Route::post('password/verify-otp',  'verifyResetOtp');    // تأكيد OTP
+    Route::post('password/reset',       'resetPassword');     // تعيين كلمة مرور جديدة
+
+    // ✅ تأكيد البريد بعد التسجيل
+    Route::post('verify',      'verify');         // التحقق من OTP بعد التسجيل
+    Route::post('otp/resend',  'resendOtp');      // إعادة إرسال OTP
+
+    // 🔑 تسجيل الدخول
+    Route::post('login', 'login');
+
+    // 🛡️ عمليات محمية بـ JWT
     Route::middleware('auth:employee')->group(function () {
+            Route::prefix('attendance')->group(function () {
+
+                Route::post('check-in', 'checkIn');
+                Route::post('check-out', 'checkOut');
+            });
+
+        // ✅ فقط الأدمن يقدر يسجل موظفين جدد
         Route::middleware('emp.role:admin')->group(function () {
-            Route::post('register','register');
-    });
-        Route::get('me','me');
-        Route::post('logout','logout');
-        Route::post('refresh','refresh');
-    });
+            Route::post('register', 'register'); // تسجيل موظف جديد
+            Route::get('attendance','index');
+            Route::get('attendance/monthly-report','monthlyReport');
+        });
+
+        // 👤 المستخدم الحالي
+        Route::get('me', 'me');
+
+        // 🔁 تجديد التوكن أو الخروج
+        Route::post('refresh', 'refresh');
+        Route::post('logout', 'logout');
     });
 });
+
+
+
+
+
+
+
+
