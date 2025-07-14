@@ -18,12 +18,14 @@ Route::prefix('cart')->group(function () {
     Route::post('add', 'addToCart');
     Route::get('/', 'getCart');
     Route::delete('{id}', 'removeFromCart');
+    Route::put('{id}','updateCart');
 });
     Route::post('/favorites/add','addToFavorites');
     Route::get('/favorites','getFavorites');
     Route::delete('/favorites/{productId}','removeFromFavorites');
     Route::get('/wishlist', 'getWishlist');
     Route::post('/wishlist', 'addToWishlist');
+    Route::delete('/wishlist','removeFromWishlist');
 
 Route::prefix('Products')->group(function () {
 

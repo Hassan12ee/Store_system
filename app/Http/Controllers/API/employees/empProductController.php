@@ -8,53 +8,82 @@ use Illuminate\Http\Request;
 use App\Models\Product;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Milon\Barcode\DNS1D;
+
 class empProductController extends Controller
 {
     //
     use ApiResponseTrait;
 
-    
-    public function store(Request $request)
-    {
 
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string',
-            'Photos' => 'nullable|array',
-            'Photos.*' => 'file|image|max:2048', // صور فقط
-            'quantity' => 'required|integer|min:0',
-            'specifications' => 'nullable|string',
-            'price' => 'required|numeric|min:0',
-            'size' => 'nullable|string',
-            'dimensions' => 'nullable|string',
-            'warehouse_id' => 'required|integer|exists:warehouses,id',
-        ]);
 
-        if ($validator->fails()) {
-            return $this->apiResponse($validator->errors(), message: 'please validate the data', status: 422);
+public function store(Request $request)
+{
+    $validator = Validator::make($request->all(), [
+        'name' => 'required|string',
+        'Photos' => 'nullable|array',
+        'Photos.*' => 'file|image|max:2048',
+        'quantity' => 'required|integer|min:0',
+        'specifications' => 'nullable|string',
+        'price' => 'required|numeric|min:0',
+        'size' => 'nullable|string',
+        'dimensions' => 'nullable|string',
+        'warehouse_id' => 'required|integer|exists:warehouses,id',
+    ]);
 
-        }
-
-        $photoPaths = [];
-        if ($request->hasFile('Photos')) {
-            foreach ($request->file('Photos') as $photo) {
-                $path = $photo->store('products', 'public'); // storage/app/public/products
-                $photoPaths[] = 'storage/' . $path; // link usable from browser
-            }
-        }
-
-        $product = Product::create([
-            'name' => $request->name,
-            'Photos' => $photoPaths,
-            'quantity' => $request->quantity,
-            'specifications' => $request->specifications,
-            'price' => $request->price,
-            'size' => $request->size,
-            'dimensions' => $request->dimensions,
-            'warehouse_id' => $request->warehouse_id,
-        ]);
-
-        return $this->apiResponse( $product, message: 'Product created successfully', status: 201);
+    if ($validator->fails()) {
+        return $this->apiResponse($validator->errors(), message: 'please validate the data', status: 422);
     }
+
+    // رفع الصور
+    $photoPaths = [];
+    if ($request->hasFile('Photos')) {
+        foreach ($request->file('Photos') as $photo) {
+            $path = $photo->store('products', 'public');
+            $photoPaths[] = 'storage/' . $path;
+        }
+    }
+
+    // توليد باركود فريد
+    $barcode = $this->generateUniqueBarcode();
+
+    $product = Product::create([
+        'name' => $request->name,
+        'barcode' => $barcode,
+        'Photos' => $photoPaths,
+        'quantity' => $request->quantity,
+        'specifications' => $request->specifications,
+        'price' => $request->price,
+        'size' => $request->size,
+        'dimensions' => $request->dimensions,
+        'warehouse_id' => $request->warehouse_id,
+    ]);
+
+    return $this->apiResponse($product, message: 'Product created successfully', status: 201);
+}
+
+
+    protected function generateUniqueBarcode()
+    {
+        do {
+            $barcode = 'P-' . strtoupper(Str::random(8)); // مثل: P-9X8Y2Z1Q
+        } while (Product::where('barcode', $barcode)->exists());
+
+        return $barcode;
+    }
+
+
+public function showBarcode($barcode)
+{
+    // توليد صورة باركود بصيغة Base64
+    $barcodeImage = DNS1D::getBarcodePNG($barcode, 'C128', 2, 60); // النوع C128 هو Code128
+
+    return response()->json([
+        'barcode' => $barcode,
+        'image_base64' => 'data:image/png;base64,' . $barcodeImage,
+    ]);
+}
 
 
     public function update(Request $request, $id)

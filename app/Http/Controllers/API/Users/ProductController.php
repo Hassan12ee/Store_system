@@ -14,8 +14,10 @@ use App\Models\Favorite;
 
 class ProductController extends Controller
 {
+    
     //
     use ApiResponseTrait;
+
 
     public function show($id)
     {
@@ -112,26 +114,48 @@ class ProductController extends Controller
 
         ]);
     }
+
+
     public function addToCart(Request $request)
-        {
-            $request->validate([
-                'product_id' => 'required|exists:products,id',
-                'quantity' => 'required|integer|min:1'
-            ]);
+    {
+        $request->validate([
+            'product_id' => 'required|exists:products,id',
+            'quantity' => 'required|integer|min:1'
+        ]);
 
-            $user = Auth::guard('users')->user();
+        $user = Auth::guard('users')->user();
 
-            // تحديث لو المنتج موجود بالفعل
-            $cart = Cart::updateOrCreate(
-                ['user_id' => $user->id, 'product_id' => $request->product_id],
-                ['quantity' => DB::raw("quantity + {$request->quantity}")]
-            );
+        $product = Product::findOrFail($request->product_id);
 
+        // الكمية الموجودة بالفعل في الكارت
+        $existingCart = Cart::where('user_id', $user->id)
+                            ->where('product_id', $request->product_id)
+                            ->first();
+
+        $existingQuantity = $existingCart ? $existingCart->quantity : 0;
+
+        // تحقق من إجمالي الكمية المطلوبة
+        $totalQuantity = $existingQuantity + $request->quantity;
+
+        if ($totalQuantity > $product->quantity) {
             return response()->json([
-                'message' => 'Product added to cart',
-                'cart' => $cart
-            ]);
+                'message' => 'Requested quantity exceeds available stock.',
+                'available' => $product->quantity,
+            ], 400);
         }
+
+        // تحديث أو إنشاء السطر في الكارت
+        $cart = Cart::updateOrCreate(
+            ['user_id' => $user->id, 'product_id' => $request->product_id],
+            ['quantity' => DB::raw("quantity + {$request->quantity}")]
+        );
+
+        return response()->json([
+            'message' => 'Product added to cart',
+            'cart' => $cart
+        ]);
+    }
+
 
     public function getCart()
     {
@@ -152,6 +176,44 @@ class ProductController extends Controller
     }
 
 
+    public function updateCart(Request $request)
+    {
+        $request->validate([
+            'product_id' => 'required|exists:products,id',
+            'quantity' => 'required|integer|min:1',
+        ]);
+
+        $user = Auth::guard('users')->user();
+
+        // المنتج
+        $product = Product::findOrFail($request->product_id);
+
+        // تحقق من وجود الكارت
+        $cart = Cart::where('user_id', $user->id)
+                    ->where('product_id', $request->product_id)
+                    ->first();
+
+        if (!$cart) {
+            return response()->json(['message' => 'Product not found in cart'], 404);
+        }
+
+        // تحقق من الكمية المتوفرة
+        if ($request->quantity > $product->quantity) {
+            return response()->json([
+                'message' => 'Requested quantity exceeds available stock.',
+                'available' => $product->quantity,
+            ], 400);
+        }
+
+        // تحديث الكمية
+        $cart->update(['quantity' => $request->quantity]);
+
+        return response()->json([
+            'message' => 'Cart updated successfully',
+            'cart' => $cart
+        ]);
+    }
+
     public function removeFromCart($id)
     {
         $user = Auth::guard('users')->user();
@@ -161,84 +223,151 @@ class ProductController extends Controller
         return response()->json(['message' => $deleted ? 'Item removed' : 'Not found']);
     }
 
+
     public function addToWishlist(Request $request)
-{
-    $request->validate([
-        'product_id' => 'required|exists:products,id',
-    ]);
-
-    $userId =Auth::check() ? Auth::id() :null ;
-    if (!$userId) {
-        return response()->json(['message' => 'Unauthorized'], 401);
-    }
-    $wishlist = Wishlist::firstOrCreate([
-        'user_id' => $userId,
-        'product_id' => $request->product_id,
-    ]);
-
-    return response()->json([
-        'message' => 'Product added to wishlist successfully',
-        'wishlist' => $wishlist,
-    ]);
-}
-public function getWishlist()
-{
-    $wishlist = Wishlist::with('product')->where('user_id', Auth::id())->get();
-
-    return response()->json([
-        'wishlist' => $wishlist
-    ]);
-}
-public function addToFavorites(Request $request)
     {
-        $user = auth('api')->user();
-
         $request->validate([
             'product_id' => 'required|exists:products,id',
         ]);
 
-        $already = Favorite::where('user_id', $user->id)
+        $userId = Auth::id();
+
+        if (!$userId) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        // 🔍 تحقق إذا كان المنتج موجود بالفعل في الـ wishlist
+        $existing = Wishlist::where('user_id', $userId)
             ->where('product_id', $request->product_id)
             ->first();
 
-        if ($already) {
-            return response()->json(['message' => 'Product is already in favorites'], 409);
+        if ($existing) {
+            return response()->json([
+                'message' => 'Product is already in wishlist',
+            ], 409); // 409 Conflict
         }
 
-        Favorite::create([
-            'user_id' => $user->id,
+        // ✅ لو مش موجود، أضفه
+        $wishlist = Wishlist::create([
+            'user_id' => $userId,
             'product_id' => $request->product_id,
         ]);
 
-        return response()->json(['message' => 'Added to favorites successfully']);
+        return response()->json([
+            'message' => 'Product added to wishlist successfully',
+            'wishlist' => $wishlist,
+        ]);
     }
 
 
+    public function getWishlist()
+    {
+        $wishlist = Wishlist::with('product')->where('user_id', Auth::id())->get();
 
-public function getFavorites()
-{
-    $Favorites = Favorite::with('product')->where('user_id', Auth::id())->get();
+        return response()->json([
 
-    return response()->json([
+            'products' => collect($wishlist)->map(function ($product) {
+            return [
+                "id"=> $product->id,
+                "user_id"=>$product->user_id,
+                "product_id"=>$product->product_id,
+                "created_at"=> $product->created_at,
+                "updated_at"=> $product->updated_at,
+                'products' =>[
+                'id' => $product->product->id,
+                'name' => $product->product->name,
+                'Photos' => collect($product->product->Photos)->map(fn($photo) => asset($photo)),
+                'main_photo' => $product->product->main_photo ? asset($product->main_photo) : null,
+                'quantity' => $product->product->quantity,
+                'specifications' => $product->product->specifications,
+                'price' => $product->product->price,
+                'size' => $product->product->size,
+                'dimensions' => $product->product->dimensions,
+                'warehouse_id' => $product->product->warehouse_id,
+                'created_at' => $product->product->created_at,
+                'updated_at' => $product->product->updated_at,],
 
-        'products' => collect($Favorites->items())->map(function ($product) {
-        return [
-            'id' => $product->id,
-            'name' => $product->name,
-            'Photos' => collect($product->Photos)->map(fn($photo) => asset($photo)),
-            'main_photo' => $product->main_photo ? asset($product->main_photo) : null,
-            'quantity' => $product->quantity,
-            'specifications' => $product->specifications,
-            'price' => $product->price,
-            'size' => $product->size,
-            'dimensions' => $product->dimensions,
-            'warehouse_id' => $product->warehouse_id,
-            'created_at' => $product->created_at,
-            'updated_at' => $product->updated_at,
-        ];
-        }),
-    ]);
-}
+            ];
+            }),
+        ]);
+    }
+
+
+    public function removeFromWishlist(Request $request)
+    {
+        $request->validate([
+            'product_id' => 'required|exists:products,id',
+        ]);
+
+        $user = Auth::guard('users')->user();
+
+        $wishlistItem = Wishlist::where('user_id', $user->id)
+                                ->where('product_id', $request->product_id)
+                                ->first();
+
+        if (!$wishlistItem) {
+            return response()->json([
+                'message' => 'Product not found in wishlist'
+            ], 404);
+        }
+
+        $wishlistItem->delete();
+
+        return response()->json([
+            'message' => 'Product removed from wishlist successfully'
+        ]);
+    }
+
+
+    public function addToFavorites(Request $request)
+    {
+            $user = auth('api')->user();
+
+            $request->validate([
+                'product_id' => 'required|exists:products,id',
+            ]);
+
+            $already = Favorite::where('user_id', $user->id)
+                ->where('product_id', $request->product_id)
+                ->first();
+
+            if ($already) {
+                return response()->json(['message' => 'Product is already in favorites'], 409);
+            }
+
+            Favorite::create([
+                'user_id' => $user->id,
+                'product_id' => $request->product_id,
+            ]);
+
+            return response()->json(['message' => 'Added to favorites successfully']);
+    }
+
+
+    public function getFavorites()
+    {
+        $Favorites = Favorite::with('product')->where('user_id', Auth::id())->get();
+
+        return response()->json([
+
+            'products' => collect($Favorites->items())->map(function ($product) {
+            return [
+                'id' => $product->id,
+                'name' => $product->product->name,
+                'Photos' => collect($product->Photos)->map(fn($photo) => asset($photo)),
+                'main_photo' => $product->main_photo ? asset($product->main_photo) : null,
+                'quantity' => $product->quantity,
+                'specifications' => $product->specifications,
+                'price' => $product->price,
+                'size' => $product->size,
+                'dimensions' => $product->dimensions,
+                'warehouse_id' => $product->warehouse_id,
+                'created_at' => $product->created_at,
+                'updated_at' => $product->updated_at,
+            ];
+            }),
+        ]);
+    }
 
 
     public function removeFromFavorites($productId)
