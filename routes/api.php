@@ -5,12 +5,32 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\Users\AuthController;
 use App\Http\Controllers\Api\employees\empAuthController;
  use App\Http\Controllers\Api\employees\empProductController;
+ use App\Http\Controllers\Api\Users\ProductController;
 
 Route::middleware(['auth:users', 'verified'])->group(function () {
+    // routes/api.php
 
-// Route::controller(DiabtesRecord::class)->group(function ()   {
-// Route::get('/records/{id}','showhistory');
-// });
+
+
+
+Route::controller(ProductController::class)->group(function ()   {
+Route::prefix('cart')->group(function () {
+    Route::post('add', 'addToCart');
+    Route::get('/', 'getCart');
+    Route::delete('{id}', 'removeFromCart');
+});
+    Route::post('/favorites/add','addToFavorites');
+    Route::get('/favorites','getFavorites');
+    Route::delete('/favorites/{productId}','removeFromFavorites');
+    Route::get('/wishlist', 'getWishlist');
+    Route::post('/wishlist', 'addToWishlist');
+
+Route::prefix('Products')->group(function () {
+
+            Route::get('/{id}', 'show');                       // عرض منتج مفرد
+            Route::get('/', 'index');                          // عرض قائمة المنتجات
+});
+});
     Route::get('/secure', function () {
         return response()->json(['message' => 'You are verified ✅']);
     });

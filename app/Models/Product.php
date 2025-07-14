@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Favorite;
 
 class Product extends Model
 {
@@ -21,5 +22,11 @@ class Product extends Model
 protected $casts = [
     'Photos' => 'array',
 ];
+// app/Models/Product.php
+public function favoritedBy()
+{
+    return $this->hasMany(Favorite::class);
+}
+
 
 }
