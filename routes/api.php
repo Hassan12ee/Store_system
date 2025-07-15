@@ -6,8 +6,8 @@ use App\Http\Controllers\Api\Users\AuthController;
 use App\Http\Controllers\Api\employees\empAuthController;
 use App\Http\Controllers\Api\employees\empProductController;
 use App\Http\Controllers\Api\Users\ProductController;
-use app\http\Controllers\Api\Users\AddressController;
-use app\http\Controllers\Api\Users\OrderController;
+use App\http\Controllers\Api\Users\AddressController;
+use App\http\Controllers\Api\Users\OrderController;
 
 Route::controller(ProductController::class)->prefix('Products')->group(function () {
 

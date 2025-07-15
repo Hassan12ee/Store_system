@@ -138,9 +138,7 @@ class AuthController extends Controller
         if (!$user) {
                 return response()->json(['error' => 'User not found'], 404);
         }
-        if (is_null($user->email_verified_at)) {
-            return response()->json(['error' => 'Please verify your email before logging in'], 403);
-        }
+
 
         return $this->respondWithToken($token);
     }
