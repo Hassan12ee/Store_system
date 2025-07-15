@@ -6,9 +6,12 @@ use App\Http\Controllers\Api\Users\AuthController;
 use App\Http\Controllers\Api\employees\empAuthController;
 use App\Http\Controllers\Api\employees\empProductController;
 use App\Http\Controllers\Api\Users\ProductController;
-use App\http\Controllers\Api\Users\AddressController;
-use App\http\Controllers\Api\Users\OrderController;
+use app\http\Controllers\Api\Users\AddressController;
+use app\http\Controllers\Api\Users\OrderController;
 
+            Route::get('/{id}', 'show');                       // عرض منتج مفرد
+            Route::get('/', 'index');                          // عرض قائمة المنتجات
+});
 
 Route::middleware(['auth:users', 'verified'])->group(function () {
     // routes/api.php
@@ -34,11 +37,7 @@ Route::prefix('cart')->group(function () {
 
 
 
-Route::prefix('Products')->group(function () {
 
-            Route::get('/{id}', 'show');                       // عرض منتج مفرد
-            Route::get('/', 'index');                          // عرض قائمة المنتجات
-});
 });
     Route::get('/secure', function () {
         return response()->json(['message' => 'You are verified ✅']);
