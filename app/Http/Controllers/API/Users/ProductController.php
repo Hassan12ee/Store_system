@@ -14,7 +14,7 @@ use App\Models\Favorite;
 
 class ProductController extends Controller
 {
-    
+
     //
     use ApiResponseTrait;
 
@@ -120,23 +120,23 @@ class ProductController extends Controller
     {
         $request->validate([
             'product_id' => 'required|exists:products,id',
-            'quantity' => 'required|integer|min:1'
         ]);
 
         $user = Auth::guard('users')->user();
 
         $product = Product::findOrFail($request->product_id);
 
-        // الكمية الموجودة بالفعل في الكارت
+        // الحصول على المنتج من الكارت إن وجد
         $existingCart = Cart::where('user_id', $user->id)
                             ->where('product_id', $request->product_id)
                             ->first();
 
         $existingQuantity = $existingCart ? $existingCart->quantity : 0;
 
-        // تحقق من إجمالي الكمية المطلوبة
-        $totalQuantity = $existingQuantity + $request->quantity;
+        // الكمية الجديدة بعد الإضافة
+        $totalQuantity = $existingQuantity + 1;
 
+        // التحقق من التوفر في المخزون
         if ($totalQuantity > $product->quantity) {
             return response()->json([
                 'message' => 'Requested quantity exceeds available stock.',
@@ -144,17 +144,18 @@ class ProductController extends Controller
             ], 400);
         }
 
-        // تحديث أو إنشاء السطر في الكارت
+        // تحديث أو إنشاء الكارت
         $cart = Cart::updateOrCreate(
             ['user_id' => $user->id, 'product_id' => $request->product_id],
-            ['quantity' => DB::raw("quantity + {$request->quantity}")]
+            ['quantity' => DB::raw("quantity + 1")]
         );
 
         return response()->json([
-            'message' => 'Product added to cart',
+            'message' => 'Product added to cart successfully.',
             'cart' => $cart
         ]);
     }
+
 
 
     public function getCart()
@@ -273,7 +274,7 @@ class ProductController extends Controller
                 "product_id"=>$product->product_id,
                 "created_at"=> $product->created_at,
                 "updated_at"=> $product->updated_at,
-                'products' =>[
+                'product' =>[
                 'id' => $product->product->id,
                 'name' => $product->product->name,
                 'Photos' => collect($product->product->Photos)->map(fn($photo) => asset($photo)),
