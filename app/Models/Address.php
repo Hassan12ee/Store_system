@@ -9,6 +9,11 @@ class Address extends Model
 {
     use HasFactory;
 
+    // Explicitly define the primary key and its behavior
+    protected $primaryKey = 'id';
+    public $incrementing = true;
+    protected $keyType = 'int';
+
     protected $fillable = [
         'user_id',
         'employee_id',

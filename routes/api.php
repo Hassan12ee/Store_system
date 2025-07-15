@@ -6,8 +6,8 @@ use App\Http\Controllers\Api\Users\AuthController;
 use App\Http\Controllers\Api\employees\empAuthController;
 use App\Http\Controllers\Api\employees\empProductController;
 use App\Http\Controllers\Api\Users\ProductController;
-use app\http\Controllers\Api\Users\AddressController;
-use app\http\Controllers\Api\Users\OrderController;
+use App\http\Controllers\Api\Users\AddressController;
+use App\http\Controllers\Api\Users\OrderController;
 
 
 Route::middleware(['auth:users', 'verified'])->group(function () {
@@ -43,14 +43,15 @@ Route::prefix('Products')->group(function () {
     Route::get('/secure', function () {
         return response()->json(['message' => 'You are verified ✅']);
     });
-    Route::controller(OrderController::class)->group(function ()   {
+
         Route::get('orders', [OrderController::class, 'index']);
         Route::post('orders', [OrderController::class, 'store']);
         Route::get('orders/{id}', [OrderController::class, 'show']);
         Route::delete('orders/{id}', [OrderController::class, 'destroy']);
+        Route::get('addresses', [AddressController::class, 'index']);
+        Route::post('addresses', [AddressController::class, 'store']);
+        Route::post('orders/from-cart', [OrderController::class, 'createOrderFromCart']);
         });
-
-});
 
 
 
