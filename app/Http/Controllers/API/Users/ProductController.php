@@ -14,7 +14,7 @@ use App\Models\Favorite;
 
 class ProductController extends Controller
 {
-    
+
     //
     use ApiResponseTrait;
 
@@ -116,45 +116,46 @@ class ProductController extends Controller
     }
 
 
-    public function addToCart(Request $request)
-    {
-        $request->validate([
-            'product_id' => 'required|exists:products,id',
-            'quantity' => 'required|integer|min:1'
-        ]);
+public function addToCart(Request $request)
+{
+    $request->validate([
+        'product_id' => 'required|exists:products,id',
+    ]);
 
-        $user = Auth::guard('users')->user();
+    $user = Auth::guard('users')->user();
 
-        $product = Product::findOrFail($request->product_id);
+    $product = Product::findOrFail($request->product_id);
 
-        // الكمية الموجودة بالفعل في الكارت
-        $existingCart = Cart::where('user_id', $user->id)
-                            ->where('product_id', $request->product_id)
-                            ->first();
+    // الحصول على المنتج من الكارت إن وجد
+    $existingCart = Cart::where('user_id', $user->id)
+                        ->where('product_id', $request->product_id)
+                        ->first();
 
-        $existingQuantity = $existingCart ? $existingCart->quantity : 0;
+    $existingQuantity = $existingCart ? $existingCart->quantity : 0;
 
-        // تحقق من إجمالي الكمية المطلوبة
-        $totalQuantity = $existingQuantity + $request->quantity;
+    // الكمية الجديدة بعد الإضافة
+    $totalQuantity = $existingQuantity + 1;
 
-        if ($totalQuantity > $product->quantity) {
-            return response()->json([
-                'message' => 'Requested quantity exceeds available stock.',
-                'available' => $product->quantity,
-            ], 400);
-        }
-
-        // تحديث أو إنشاء السطر في الكارت
-        $cart = Cart::updateOrCreate(
-            ['user_id' => $user->id, 'product_id' => $request->product_id],
-            ['quantity' => DB::raw("quantity + {$request->quantity}")]
-        );
-
+    // التحقق من التوفر في المخزون
+    if ($totalQuantity > $product->quantity) {
         return response()->json([
-            'message' => 'Product added to cart',
-            'cart' => $cart
-        ]);
+            'message' => 'Requested quantity exceeds available stock.',
+            'available' => $product->quantity,
+        ], 400);
     }
+
+    // تحديث أو إنشاء الكارت
+    $cart = Cart::updateOrCreate(
+        ['user_id' => $user->id, 'product_id' => $request->product_id],
+        ['quantity' => DB::raw("quantity + 1")]
+    );
+
+    return response()->json([
+        'message' => 'Product added to cart successfully.',
+        'cart' => $cart
+    ]);
+}
+
 
 
     public function getCart()
@@ -293,16 +294,14 @@ class ProductController extends Controller
     }
 
 
-    public function removeFromWishlist(Request $request)
+    public function removeFromWishlist($id)
     {
-        $request->validate([
-            'product_id' => 'required|exists:products,id',
-        ]);
+
 
         $user = Auth::guard('users')->user();
 
         $wishlistItem = Wishlist::where('user_id', $user->id)
-                                ->where('product_id', $request->product_id)
+                                ->where('product_id', $id)
                                 ->first();
 
         if (!$wishlistItem) {

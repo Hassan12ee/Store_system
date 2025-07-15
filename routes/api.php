@@ -32,7 +32,7 @@ Route::prefix('cart')->group(function () {
     Route::delete('/favorites/{productId}','removeFromFavorites');
     Route::get('/wishlist', 'getWishlist');
     Route::post('/wishlist', 'addToWishlist');
-    Route::delete('/wishlist','removeFromWishlist');
+    Route::delete('/wishlist/{id}','removeFromWishlist');
     // Route::apiResource('addresses', AddressController::class);
 
 
