@@ -4,8 +4,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\Users\AuthController;
 use App\Http\Controllers\Api\employees\empAuthController;
- use App\Http\Controllers\Api\employees\empProductController;
- use App\Http\Controllers\Api\Users\ProductController;
+use App\Http\Controllers\Api\employees\empProductController;
+use App\Http\Controllers\Api\Users\ProductController;
+use app\http\Controllers\Api\Users\AddressController;
+use app\http\Controllers\Api\Users\OrderController;
+
 
 Route::middleware(['auth:users', 'verified'])->group(function () {
     // routes/api.php
@@ -26,6 +29,10 @@ Route::prefix('cart')->group(function () {
     Route::get('/wishlist', 'getWishlist');
     Route::post('/wishlist', 'addToWishlist');
     Route::delete('/wishlist','removeFromWishlist');
+    // Route::apiResource('addresses', AddressController::class);
+
+
+
 
 Route::prefix('Products')->group(function () {
 
@@ -36,7 +43,16 @@ Route::prefix('Products')->group(function () {
     Route::get('/secure', function () {
         return response()->json(['message' => 'You are verified ✅']);
     });
+    Route::controller(OrderController::class)->group(function ()   {
+        Route::get('orders', [OrderController::class, 'index']);
+        Route::post('orders', [OrderController::class, 'store']);
+        Route::get('orders/{id}', [OrderController::class, 'show']);
+        Route::delete('orders/{id}', [OrderController::class, 'destroy']);
+        });
+
 });
+
+
 
 
 Route::prefix('auth')->controller(AuthController::class)->group(function () {
