@@ -9,6 +9,8 @@ use App\Http\Controllers\Api\Users\ProductController;
 use app\http\Controllers\Api\Users\AddressController;
 use app\http\Controllers\Api\Users\OrderController;
 
+Route::controller(ProductController::class)->prefix('Products')->group(function () {
+
             Route::get('/{id}', 'show');                       // عرض منتج مفرد
             Route::get('/', 'index');                          // عرض قائمة المنتجات
 });
