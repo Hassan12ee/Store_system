@@ -16,6 +16,13 @@ class empProductController extends Controller
     //
     use ApiResponseTrait;
 
+// Auth::guard('web')->user()->hasRole('admin');
+// Auth::guard('employee')->user()->can('view_orders');
+// $user = User::find(1);
+// $user->assignRole('admin');
+
+// $employee = Employee::find(5);
+// $employee->givePermissionTo('view_orders');
 
 
     public function store(Request $request)

@@ -7,13 +7,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Tymon\JWTAuth\Contracts\JWTSubject;
-
+use Spatie\Permission\Traits\HasRoles;
 
 
 class employee extends Authenticatable implements JWTSubject
 {
 
-    use HasFactory, Notifiable;
+    use HasFactory, Notifiable,HasRoles;
 
     /**
      * The attributes that are mass assignable.
@@ -61,7 +61,7 @@ class employee extends Authenticatable implements JWTSubject
     {
         return $this->getKey();
     }
-
+protected $guard_name = 'employee';
     /**
      * Return a key value array, containing any custom claims to be added to the JWT.
      *

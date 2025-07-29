@@ -10,52 +10,41 @@ use App\http\Controllers\Api\Users\AddressController;
 use App\http\Controllers\Api\Users\OrderController;
 
 Route::controller(ProductController::class)->prefix('Products')->group(function () {
-
-            Route::get('/{id}', 'show');                       // عرض منتج مفرد
-            Route::get('/', 'index');                          // عرض قائمة المنتجات
+    Route::get('/{id}', 'show');                       // عرض منتج مفرد
+    Route::get('/', 'index');                          // عرض قائمة المنتجات
 });
 
 Route::middleware(['auth:users', 'verified'])->group(function () {
-    // routes/api.php
 
-
-
-
-Route::controller(ProductController::class)->group(function ()   {
-Route::prefix('cart')->group(function () {
-    Route::post('add', 'addToCart');
-    Route::get('/', 'getCart');
-    Route::delete('{id}', 'removeFromCart');
-    Route::put('{id}','updateCart');
-});
-    Route::post('/favorites/add','addToFavorites');
-    Route::get('/favorites','getFavorites');
-    Route::delete('/favorites/{productId}','removeFromFavorites');
-    Route::get('/wishlist', 'getWishlist');
-    Route::post('/wishlist', 'addToWishlist');
-    Route::delete('/wishlist/{id}','removeFromWishlist');
-    // Route::apiResource('addresses', AddressController::class);
-
-
-
-
-
-});
+    Route::controller(ProductController::class)->group(function ()   {
+        Route::prefix('cart')->group(function () {
+            Route::post('add', 'addToCart');
+            Route::get('/', 'getCart');
+            Route::delete('{id}', 'removeFromCart');
+            Route::put('/','updateCart');
+        });
+        Route::post('/favorites/add','addToFavorites');
+        Route::get('/favorites','getFavorites');
+        Route::delete('/favorites/{productId}','removeFromFavorites');
+        Route::get('/wishlist', 'getWishlist');
+        Route::post('/wishlist', 'addToWishlist');
+        Route::delete('/wishlist/{id}','removeFromWishlist');
+    });
     Route::get('/secure', function () {
         return response()->json(['message' => 'You are verified ✅']);
     });
-
-        Route::get('orders', [OrderController::class, 'index']);
-        Route::post('orders', [OrderController::class, 'store']);
-        Route::get('orders/{id}', [OrderController::class, 'show']);
-        Route::delete('orders/{id}', [OrderController::class, 'destroy']);
-        Route::get('addresses', [AddressController::class, 'index']);
         Route::post('addresses', [AddressController::class, 'store']);
+        Route::get('/addresses', [AddressController::class, 'index']);
+        Route::put('/addresses/{id}', [AddressController::class, 'update']);
+        Route::delete('/addresses/{id}', [AddressController::class, 'destroy']);
+        Route::post('orders', [OrderController::class, 'store']);
         Route::post('orders/from-cart', [OrderController::class, 'createOrderFromCart']);
-        });
+        Route::get('/orders', [OrderController::class, 'getUserOrders']);
+        Route::get('/orders/{id}', [OrderController::class, 'show']);
 
 
 
+});
 
 Route::prefix('auth')->controller(AuthController::class)->group(function () {
 
@@ -86,8 +75,9 @@ Route::prefix('auth')->controller(AuthController::class)->group(function () {
 // ====================================================================
 //
 //                              employee
-// emp.role:support ,sales, store, admin
+//                     role:support ,sales, store, admin
 // ====================================================================
+
 Route::prefix('employee')->group(function () {
 
 
@@ -159,3 +149,47 @@ Route::prefix('auth/emp')->controller(empAuthController::class)->group(function 
 
 
 
+// use Spatie\Permission\Models\Role;
+// use Spatie\Permission\Models\Permission;
+
+// Route::get('/setup-roles-permissions', function () {
+//     // إنشاء الصلاحيات
+//     Permission::create(['name' => 'view_dashboard',
+//     'guard_name' => 'employee' // أو 'web' للمستخدمين
+//     ]);
+//     Permission::create(['name' => 'manage_users']);
+//     Permission::create(['name' => 'manage_orders']);
+
+//     // إنشاء الأدوار
+//     $admin = Role::create(['name' => 'admin'
+// ,
+//     'guard_name' => 'employee' // أو 'web' للمستخدمين
+// ]);
+//     $employee = Role::create(['name' => 'employee']);
+
+//     // ربط صلاحيات بالرول
+//     $admin->givePermissionTo(['view_dashboard', 'manage_users', 'manage_orders']);
+//     $employee->givePermissionTo(['view_dashboard']);
+
+//     return 'Roles and permissions created';
+// });
+// use Spatie\Permission\Models\Role;
+// use Spatie\Permission\Models\Permission;
+
+// // إنشاء صلاحية
+// $permission = Permission::create([
+//     'name' => 'view_reports',
+//     'guard_name' => 'employee' // أو 'web' للمستخدمين
+// ]);
+
+// // إنشاء رول
+// $role = Role::create([
+//     'name' => 'manager',
+//     'guard_name' => 'employee' // أو 'web' للمستخدمين
+// ]);
+
+// // ربط صلاحية بالرول
+// $role->givePermissionTo('view_reports');
+
+// // أو ربط رول بصلاحية
+// $permission->assignRole('manager');

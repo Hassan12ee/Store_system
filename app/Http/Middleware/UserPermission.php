@@ -4,26 +4,23 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
 use Tymon\JWTAuth\Facades\JWTAuth;
-class CheckEmployeeRole
+
+class UserPermission
 {
     /**
      * Handle an incoming request.
-     *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
      */
-    public function handle(Request $request, Closure $next, ...$permission)
+    public function handle(Request $request, Closure $next, $permission)
     {
-       try {
-            $employee = JWTAuth::parseToken()->authenticate();
+        try {
+            $user = JWTAuth::parseToken()->authenticate();
 
-            if (!$employee || !$employee->can($permission)) {
+            if (!$user || !$user->can($permission)) {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
 
             return $next($request);
-
         } catch (\Exception $e) {
             return response()->json(['message' => 'Token Error', 'error' => $e->getMessage()], 401);
         }

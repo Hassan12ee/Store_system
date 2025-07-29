@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\Cart;
 use App\Models\Wishlist;
 use Illuminate\Support\Facades\DB;
-use App\Models\Favorite;
+
 
 class ProductController extends Controller
 {
@@ -116,45 +116,45 @@ class ProductController extends Controller
     }
 
 
-public function addToCart(Request $request)
-{
-    $request->validate([
-        'product_id' => 'required|exists:products,id',
-    ]);
+    public function addToCart(Request $request)
+    {
+        $request->validate([
+            'product_id' => 'required|exists:products,id',
+        ]);
 
-    $user = Auth::guard('users')->user();
+        $user = Auth::guard('users')->user();
 
-    $product = Product::findOrFail($request->product_id);
+        $product = Product::findOrFail($request->product_id);
 
-    // الحصول على المنتج من الكارت إن وجد
-    $existingCart = Cart::where('user_id', $user->id)
-                        ->where('product_id', $request->product_id)
-                        ->first();
+        // الحصول على المنتج من الكارت إن وجد
+        $existingCart = Cart::where('user_id', $user->id)
+                            ->where('product_id', $request->product_id)
+                            ->first();
 
-    $existingQuantity = $existingCart ? $existingCart->quantity : 0;
+        $existingQuantity = $existingCart ? $existingCart->quantity : 0;
 
-    // الكمية الجديدة بعد الإضافة
-    $totalQuantity = $existingQuantity + 1;
+        // الكمية الجديدة بعد الإضافة
+        $totalQuantity = $existingQuantity + 1;
 
-    // التحقق من التوفر في المخزون
-    if ($totalQuantity > $product->quantity) {
+        // التحقق من التوفر في المخزون
+        if ($totalQuantity > $product->quantity) {
+            return response()->json([
+                'message' => 'Requested quantity exceeds available stock.',
+                'available' => $product->quantity,
+            ], 400);
+        }
+
+        // تحديث أو إنشاء الكارت
+        $cart = Cart::updateOrCreate(
+            ['user_id' => $user->id, 'product_id' => $request->product_id],
+            ['quantity' => DB::raw("quantity + 1")]
+        );
+
         return response()->json([
-            'message' => 'Requested quantity exceeds available stock.',
-            'available' => $product->quantity,
-        ], 400);
+            'message' => 'Product added to cart successfully.',
+            'cart' => $cart
+        ]);
     }
-
-    // تحديث أو إنشاء الكارت
-    $cart = Cart::updateOrCreate(
-        ['user_id' => $user->id, 'product_id' => $request->product_id],
-        ['quantity' => DB::raw("quantity + 1")]
-    );
-
-    return response()->json([
-        'message' => 'Product added to cart successfully.',
-        'cart' => $cart
-    ]);
-}
 
 
 
@@ -171,7 +171,23 @@ public function addToCart(Request $request)
         });
 
         return response()->json([
-            'items' => $cartItems,
+            'items' => collect($cartItems)->map(function ($product) {
+            return [
+                "id"=> $product->id,
+                "user_id"=>$product->user_id,
+                "product_id"=>$product->product_id,
+                "quantity"=>$product->quantity,
+                "created_at"=> $product->created_at,
+                "updated_at"=> $product->updated_at,
+                'name' => $product->product->name,
+                'main_photo' => $product->product->main_photo ? asset($product->product->main_photo) : null,
+                'specifications' => $product->product->specifications,
+                'price' => $product->product->price,
+
+
+
+            ];
+            }),
             'total' => round($total, 2)
         ]);
     }
@@ -318,66 +334,6 @@ public function addToCart(Request $request)
     }
 
 
-    public function addToFavorites(Request $request)
-    {
-            $user = auth('api')->user();
 
-            $request->validate([
-                'product_id' => 'required|exists:products,id',
-            ]);
-
-            $already = Favorite::where('user_id', $user->id)
-                ->where('product_id', $request->product_id)
-                ->first();
-
-            if ($already) {
-                return response()->json(['message' => 'Product is already in favorites'], 409);
-            }
-
-            Favorite::create([
-                'user_id' => $user->id,
-                'product_id' => $request->product_id,
-            ]);
-
-            return response()->json(['message' => 'Added to favorites successfully']);
-    }
-
-
-    public function getFavorites()
-    {
-        $Favorites = Favorite::with('product')->where('user_id', Auth::id())->get();
-
-        return response()->json([
-
-            'products' => collect($Favorites->items())->map(function ($product) {
-            return [
-                'id' => $product->id,
-                'name' => $product->product->name,
-                'Photos' => collect($product->Photos)->map(fn($photo) => asset($photo)),
-                'main_photo' => $product->main_photo ? asset($product->main_photo) : null,
-                'quantity' => $product->quantity,
-                'specifications' => $product->specifications,
-                'price' => $product->price,
-                'size' => $product->size,
-                'dimensions' => $product->dimensions,
-                'warehouse_id' => $product->warehouse_id,
-                'created_at' => $product->created_at,
-                'updated_at' => $product->updated_at,
-            ];
-            }),
-        ]);
-    }
-
-
-    public function removeFromFavorites($productId)
-    {
-        $user = auth('api')->user();
-
-        Favorite::where('user_id', $user->id)
-            ->where('product_id', $productId)
-            ->delete();
-
-        return response()->json(['message' => 'Removed from favorites']);
-    }
 
 }

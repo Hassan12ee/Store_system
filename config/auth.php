@@ -37,7 +37,7 @@ return [
 
     'guards' => [
 
-            'employee' => [
+        'employee' => [
         'driver' => 'jwt',
         'provider' => 'employees',
     ],

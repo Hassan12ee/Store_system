@@ -15,7 +15,8 @@ return Application::configure(basePath: dirname(__DIR__))
         //
          $middleware->alias([
         'verified' => \App\Http\Middleware\EnsureEmailIsVerified::class,
-        'emp.role' => \App\Http\Middleware\CheckEmployeeRole::class,
+        'employee.permission' => \App\Http\Middleware\CheckEmployeeRole::class,
+        'user.permission' => \App\Http\Middleware\UserPermission::class,
     ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
