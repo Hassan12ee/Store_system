@@ -11,24 +11,21 @@ use Tymon\JWTAuth\Facades\JWTAuth;
 
 class AddressController extends Controller
 {
-    public function index()
-    {
-        return Address::all();
-    }
+
 
     public function store(Request $request)
     {
         $request->validate([
-            'governorate' => 'required',
-            'city' => 'required',
+            'governorate' => 'required|string',
+            'city' => 'required|string',
             'street' => 'required|string',
             'comments' => 'nullable|string',
         ]);
 
         try {
-            $user = JWTAuth::parseToken()->authenticate(); // get user from JWT token
+            $user = JWTAuth::parseToken()->authenticate();
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Unauthorized'], 401);
+            return response()->json(['status' => false, 'message' => 'Unauthorized'], 401);
         }
 
         $address = new Address([
@@ -38,31 +35,42 @@ class AddressController extends Controller
             'comments' => $request->comments,
         ]);
 
-        $address->user()->associate($user); // associate user_id
+        $address->user()->associate($user);
         $address->save();
 
-        return response()->json($address, 201);
+        return response()->json([
+            'status' => true,
+            'message' => 'Address added successfully.',
+            'data' => $address
+        ], 201);
     }
+
+
 
     public function show()
     {
         try {
             $user = JWTAuth::parseToken()->authenticate();
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Unauthorized'], 401);
+            return response()->json(['status' => false, 'message' => 'Unauthorized'], 401);
         }
 
         $addresses = $user->addresses()->get();
 
-        return response()->json($addresses);
+        return response()->json([
+            'status' => true,
+            'data' => $addresses
+        ]);
     }
+
+
 
     public function update(Request $request, $id)
     {
         try {
             $user = JWTAuth::parseToken()->authenticate();
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Unauthorized'], 401);
+            return response()->json(['status' => false, 'message' => 'Unauthorized'], 401);
         }
 
         $request->validate([
@@ -75,7 +83,7 @@ class AddressController extends Controller
         $address = Address::where('user_id', $user->id)->find($id);
 
         if (!$address) {
-            return response()->json(['error' => 'Address not found'], 404);
+            return response()->json(['status' => false, 'message' => 'Address not found'], 404);
         }
 
         $address->update([
@@ -85,26 +93,37 @@ class AddressController extends Controller
             'comments' => $request->comments,
         ]);
 
-        return response()->json(['message' => 'Address updated successfully', 'address' => $address]);
-
+        return response()->json([
+            'status' => true,
+            'message' => 'Address updated successfully.',
+            'data' => $address
+        ]);
     }
+
+
 
     public function destroy($id)
     {
         try {
             $user = JWTAuth::parseToken()->authenticate();
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Unauthorized'], 401);
+            return response()->json(['status' => false, 'message' => 'Unauthorized'], 401);
         }
 
         $address = Address::where('user_id', $user->id)->find($id);
 
         if (!$address) {
-            return response()->json(['error' => 'Address not found'], 404);
+            return response()->json(['status' => false, 'message' => 'Address not found'], 404);
         }
 
         $address->delete();
 
-        return response()->json(['message' => 'Address deleted successfully']);
+        return response()->json([
+            'status' => true,
+            'message' => 'Address deleted successfully.'
+        ]);
     }
+
+
+
 }

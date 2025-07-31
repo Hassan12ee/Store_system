@@ -15,6 +15,7 @@ class Product extends Model
         'quantity',
         'specifications',
         'price',
+        'warehouse_quantity',
         'size',
         'dimensions',
         'warehouse_id',
@@ -29,5 +30,31 @@ public function favoritedBy()
     return $this->hasMany(Favorite::class);
 }
 
+// app/Models/Product.php
+
+public function receipts()
+{
+    return $this->hasMany(WarehouseReceipt::class);
+}
+
+public function orderDetails()
+{
+    return $this->hasMany(OrderDetail::class);
+}
+
+public function returnedProducts()
+{
+    return $this->hasMany(ReturnedProduct::class);
+}
+
+// الكمية الحالية في المخزون (ديناميك)
+public function getStockQuantityAttribute()
+{
+    $received = $this->receipts()->sum('quantity_received');
+    $sold     = $this->orderDetails()->sum('quantity');
+    $returned = $this->returnedProducts()->sum('quantity');
+
+    return $received - $sold + $returned;
+}
 
 }

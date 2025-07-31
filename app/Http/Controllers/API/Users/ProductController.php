@@ -8,9 +8,10 @@ use Illuminate\Http\Request;
 use App\Models\Product;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Cart;
+use App\Models\ReservedQuantity;
 use App\Models\Wishlist;
 use Illuminate\Support\Facades\DB;
-
+use Carbon\Carbon;
 
 class ProductController extends Controller
 {
@@ -119,41 +120,80 @@ class ProductController extends Controller
     public function addToCart(Request $request)
     {
         $request->validate([
-            'product_id' => 'required|exists:products,id',
-        ]);
+                'product_id' => 'required|exists:products,id',
+            ]);
 
-        $user = Auth::guard('users')->user();
+            $user = Auth::guard('users')->user();
 
-        $product = Product::findOrFail($request->product_id);
+            $product = Product::findOrFail($request->product_id);
 
-        // الحصول على المنتج من الكارت إن وجد
-        $existingCart = Cart::where('user_id', $user->id)
-                            ->where('product_id', $request->product_id)
+            // Check if there's already a reservation for this user & product
+            $existingReservation = ReservedQuantity::where('user_id', $user->id)
+                ->where('product_id', $request->product_id)
+                ->where('expires_at', '>', Carbon::now())
+                ->first();
+
+            $existingQuantity = $existingReservation ? $existingReservation->quantity : 0;
+            $totalRequested = $existingQuantity + 1;
+
+            if ($totalRequested > $product->quantity) {
+                return response()->json([
+                    'message' => 'Requested quantity exceeds available stock.',
+                    'available' => $product->quantity,
+                ], 400);
+            }
+
+            DB::beginTransaction();
+            try {
+                // تحديث أو إنشاء الحجز المؤقت
+                $reservation = ReservedQuantity::where('user_id', $user->id)
+                    ->where('product_id', $product->id)
+                    ->first();
+
+                if ($reservation) {
+                    $reservation->update([
+                        'quantity'    => $reservation->quantity + 1,
+                        'reserved_at' => now(),
+                        'expires_at'  => now()->addMinutes(10),
+                    ]);
+                } else {
+                    ReservedQuantity::create([
+                        'user_id'     => $user->id,
+                        'product_id'  => $product->id,
+                        'quantity'    => 1,
+                        'reserved_at' => now(),
+                        'expires_at'  => now()->addMinutes(10),
+                    ]);
+                }
+
+                // خصم الكمية من المنتج
+                $product->decrement('quantity');
+
+                // تحديث أو إنشاء الكارت
+                $cart = Cart::where('user_id', $user->id)
+                            ->where('product_id', $product->id)
                             ->first();
 
-        $existingQuantity = $existingCart ? $existingCart->quantity : 0;
+                if ($cart) {
+                    $cart->update(['quantity' => $cart->quantity + 1]);
+                } else {
+                    Cart::create([
+                        'user_id'    => $user->id,
+                        'product_id' => $product->id,
+                        'quantity'   => 1,
+                    ]);
+                }
 
-        // الكمية الجديدة بعد الإضافة
-        $totalQuantity = $existingQuantity + 1;
+                DB::commit();
 
-        // التحقق من التوفر في المخزون
-        if ($totalQuantity > $product->quantity) {
-            return response()->json([
-                'message' => 'Requested quantity exceeds available stock.',
-                'available' => $product->quantity,
-            ], 400);
-        }
+                return response()->json([
+                    'message' => 'Product added to cart and reserved.',
+                ]);
 
-        // تحديث أو إنشاء الكارت
-        $cart = Cart::updateOrCreate(
-            ['user_id' => $user->id, 'product_id' => $request->product_id],
-            ['quantity' => DB::raw("quantity + 1")]
-        );
-
-        return response()->json([
-            'message' => 'Product added to cart successfully.',
-            'cart' => $cart
-        ]);
+            } catch (\Exception $e) {
+                DB::rollBack();
+                return response()->json(['error' => 'Something went wrong.'], 500);
+            }
     }
 
 
@@ -195,49 +235,100 @@ class ProductController extends Controller
 
     public function updateCart(Request $request)
     {
-        $request->validate([
-            'product_id' => 'required|exists:products,id',
-            'quantity' => 'required|integer|min:1',
+         $request->validate([
+        'product_id' => 'required|exists:products,id',
+        'quantity'   => 'required|integer|min:1',
         ]);
 
         $user = Auth::guard('users')->user();
 
-        // المنتج
         $product = Product::findOrFail($request->product_id);
-
-        // تحقق من وجود الكارت
         $cart = Cart::where('user_id', $user->id)
                     ->where('product_id', $request->product_id)
                     ->first();
 
-        if (!$cart) {
-            return response()->json(['message' => 'Product not found in cart'], 404);
+        $reservation = ReservedQuantity::where('user_id', $user->id)
+            ->where('product_id', $product->id)
+            ->first();
+
+        if (!$cart || !$reservation) {
+            return response()->json(['message' => 'Product not found in cart or not reserved.'], 404);
         }
 
-        // تحقق من الكمية المتوفرة
-        if ($request->quantity > $product->quantity) {
-            return response()->json([
-                'message' => 'Requested quantity exceeds available stock.',
-                'available' => $product->quantity,
-            ], 400);
+        $oldQty = $cart->quantity;
+        $newQty = $request->quantity;
+        $diff = $newQty - $oldQty;
+
+        if ($diff > 0) {
+            if ($diff > $product->quantity) {
+                return response()->json([
+                    'message'  => 'Requested quantity exceeds available stock.',
+                    'available' => $product->quantity,
+                ], 400);
+            }
         }
 
-        // تحديث الكمية
-        $cart->update(['quantity' => $request->quantity]);
+        DB::beginTransaction();
+        try {
+            // Update cart quantity
+            $cart->update(['quantity' => $newQty]);
 
-        return response()->json([
-            'message' => 'Cart updated successfully',
-            'cart' => $cart
-        ]);
+            // Update reservation
+            $reservation->update([
+                'quantity'    => $newQty,
+                'expires_at'  => now()->addMinutes(10),
+            ]);
+
+            // Adjust product stock
+            if ($diff > 0) {
+                $product->decrement('quantity', $diff);
+            } elseif ($diff < 0) {
+                $product->increment('quantity', abs($diff));
+            }
+
+            DB::commit();
+            return response()->json(['message' => 'Cart updated successfully.', 'cart' => $cart]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => 'Something went wrong.'], 500);
+        }
     }
 
     public function removeFromCart($id)
     {
+
+
         $user = Auth::guard('users')->user();
 
-        $deleted = Cart::where('user_id', $user->id)->where('id', $id)->delete();
+        $cart = Cart::where('user_id', $user->id)
+                    ->where('product_id', $id)
+                    ->first();
 
-        return response()->json(['message' => $deleted ? 'Item removed' : 'Not found']);
+        $reservation = ReservedQuantity::where('user_id', $user->id)
+            ->where('product_id', $id)
+            ->first();
+
+        if (!$cart || !$reservation) {
+            return response()->json(['message' => 'Product not found in cart or reservation.'], 404);
+        }
+
+        DB::beginTransaction();
+        try {
+            // رجع الكمية للمخزون
+            $product = Product::find($id);
+            if ($product) {
+                $product->increment('quantity', $reservation->quantity);
+            }
+
+            $cart->delete();
+            $reservation->delete();
+
+            DB::commit();
+            return response()->json(['message' => 'Product removed from cart and reservation released.']);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => 'Something went wrong.'], 500);
+        }
     }
 
 

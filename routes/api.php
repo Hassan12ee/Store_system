@@ -1,13 +1,21 @@
 <?php
 
+use App\Http\Controllers\Api\employees\empAuthController;
+use App\Http\Controllers\API\employees\EmpOrderController;
+use App\Http\Controllers\Api\employees\empProductController;
+use App\Http\Controllers\Api\employees\WarehouseReceiptController;
+use App\http\Controllers\Api\Users\AddressController;
+use App\Http\Controllers\Api\Users\AuthController;
+use App\http\Controllers\Api\Users\OrderController;
+use App\Http\Controllers\Api\Users\ProductController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\Users\AuthController;
-use App\Http\Controllers\Api\employees\empAuthController;
-use App\Http\Controllers\Api\employees\empProductController;
-use App\Http\Controllers\Api\Users\ProductController;
-use App\http\Controllers\Api\Users\AddressController;
-use App\http\Controllers\Api\Users\OrderController;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+
+
+
+
 
 Route::controller(ProductController::class)->prefix('Products')->group(function () {
     Route::get('/{id}', 'show');                       // عرض منتج مفرد
@@ -34,10 +42,9 @@ Route::middleware(['auth:users', 'verified'])->group(function () {
         return response()->json(['message' => 'You are verified ✅']);
     });
         Route::post('addresses', [AddressController::class, 'store']);
-        Route::get('/addresses', [AddressController::class, 'index']);
+        Route::get('/addresses', [AddressController::class, 'show']);
         Route::put('/addresses/{id}', [AddressController::class, 'update']);
         Route::delete('/addresses/{id}', [AddressController::class, 'destroy']);
-        Route::post('orders', [OrderController::class, 'store']);
         Route::post('orders/from-cart', [OrderController::class, 'createOrderFromCart']);
         Route::get('/orders', [OrderController::class, 'getUserOrders']);
         Route::get('/orders/{id}', [OrderController::class, 'show']);
@@ -56,6 +63,8 @@ Route::prefix('auth')->controller(AuthController::class)->group(function () {
     // ✅ التحقق من البريد بعد التسجيل
     Route::post('verify',      'verify');       // تأكيد OTP
     Route::post('otp/resend',  'resendOtp');    // إعادة إرسال OTP
+     Route::post('/send-phone-code', [UserController::class, 'sendPhoneVerificationCode']);
+    Route::post('/verify-phone', [UserController::class, 'verifyPhoneCode']);
 
     // 📝 تسجيل وحساب جديد
     Route::post('register', 'register');
@@ -82,7 +91,7 @@ Route::prefix('employee')->group(function () {
 
 
     // ✅ فقط المسؤولين (admin)
-    Route::middleware(['auth:employee', 'emp.role:admin'])->group(function () {
+    Route::middleware(['auth:employee'])->group(function () {
 
 
         Route::prefix('products')->controller(empProductController::class)->group(function () {
@@ -97,8 +106,24 @@ Route::prefix('employee')->group(function () {
 
             Route::get('/{id}', 'show');                       // عرض منتج مفرد
             Route::get('/', 'index');                          // عرض قائمة المنتجات
-        });
+            Route::get('/showBarcode/{id}', 'showBarcode');
 
+
+        });
+        Route::get('/warehouse-receipts', [WarehouseReceiptController::class, 'filter']);
+        Route::post('/warehouse-receipts', [WarehouseReceiptController::class, 'store']);
+        Route::get('/warehouse-receipts/getProductHistory/{id}', [WarehouseReceiptController::class, 'getProductHistory']);
+        Route::prefix('orders')->controller(EmpOrderController::class)->group(function () {
+    Route::get('/', 'index');
+    Route::get('/{id}', 'show');
+    Route::get('/filter', 'filter');
+    Route::put('/{id}/status', 'updateStatus');
+Route::prefix('damaged-products')->group(function () {
+    Route::get('/', [DamagedProductController::class, 'index']); // فلترة مع pagination
+    Route::post('/', [DamagedProductController::class, 'store']); // تسجيل تالف جديد
+});
+
+});
     });
 
 });

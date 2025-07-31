@@ -132,7 +132,11 @@ class empAuthController extends Controller
     // Login Employee
     public function login(Request $request)
     {
-        $credentials = $request->only('email', 'password');
+        $loginField = filter_var($request->input('login'), FILTER_VALIDATE_EMAIL) ? 'email' : 'Phone';
+        $credentials = [
+            $loginField => $request->input('login'),
+            'password' => $request->input('password'),
+        ];
 
         if (!$token = Auth::guard('employee')->attempt($credentials)) {
             return response()->json(['error' => 'Invalid credentials'], 401);

@@ -11,6 +11,7 @@ use Tymon\JWTAuth\Facades\JWTAuth;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\OtpMail;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
@@ -93,6 +94,61 @@ class AuthController extends Controller
 
         return response()->json(['message' => 'Email verified successfully']);
     }
+
+
+
+
+    public function sendPhoneVerificationCode(Request $request)
+    {
+        $user = JWTAuth::parseToken()->authenticate();
+
+        $validator = Validator::make($request->all(), [
+            'phone' => 'required|digits_between:10,15|unique:users,phone,' . $user->id,
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
+        }
+
+        $code = rand(1000, 9999); // ممكن later تستخدم Twilio أو أي مزود إرسال
+        $user->phone = $request->phone;
+        $user->phone_verification_code = $code;
+        $user->phone_verified_at = null; // Reset verification
+        $user->save();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Verification code sent',
+            'code' => $code, // ⚠️ في الإنتاج لا ترسله في الرد!
+        ]);
+    }
+
+
+    public function verifyPhoneCode(Request $request)
+    {
+        $user = JWTAuth::parseToken()->authenticate();
+
+        $request->validate([
+            'code' => 'required|digits:4',
+        ]);
+
+        if ($user->phone_verification_code === $request->code) {
+            $user->phone_verified_at = now();
+            $user->phone_verification_code = null;
+            $user->save();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Phone number verified successfully',
+            ]);
+        }
+
+        return response()->json([
+            'status' => false,
+            'message' => 'Invalid verification code',
+        ], 400);
+    }
+
 
 
     public function resendOtp(Request $request)

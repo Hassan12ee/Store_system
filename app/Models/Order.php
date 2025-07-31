@@ -15,7 +15,8 @@ class Order extends Model
         'order_date',
         'customer_id',
         'created_by_employee_id',
-        'address_id'
+        'address_id',
+        'total_price'
     ];
 
     public function customer()
@@ -37,6 +38,6 @@ class Order extends Model
     {
         return $this->hasMany(OrderDetail::class, 'order_id');
     }
-    
+
 }
 
