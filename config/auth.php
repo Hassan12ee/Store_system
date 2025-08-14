@@ -36,12 +36,7 @@ return [
     */
 
     'guards' => [
-
-        'employee' => [
-        'driver' => 'jwt',
-        'provider' => 'employees',
-    ],
-    'users' => [
+    'web' => [
         'driver' => 'jwt',
         'provider' => 'users',
     ],
@@ -65,10 +60,7 @@ return [
     */
 
     'providers' => [
-        'employees' => [
-        'driver' => 'eloquent',
-        'model' => App\Models\employee::class,
-    ],
+
 
     'users' => [
         'driver' => 'eloquent',

@@ -182,27 +182,48 @@ class AuthController extends Controller
     }
 
     // Login User
-    public function login(Request $request)
+        public function login(Request $request)
     {
-        $credentials = $request->only('email', 'password');
+        $loginField = filter_var($request->input('login'), FILTER_VALIDATE_EMAIL) ? 'email' : 'Phone';
+        $credentials = [
+            $loginField => $request->input('login'),
+            'password' => $request->input('password'),
+        ];
 
         if (!$token = JWTAuth::attempt($credentials)) {
-            return response()->json(['error' => 'credentials invalid'], 401);
+            return response()->json(['error' => 'Invalid credentials'], 401);
         }
         $user = JWTAuth::user();
 
         if (!$user) {
                 return response()->json(['error' => 'User not found'], 404);
         }
-
-
         return $this->respondWithToken($token);
     }
 
+
+
+
+
     // Get Authenticated User
+
     public function me()
     {
-        return response()->json(JWTAuth::user());
+        $user = JWTAuth::user();
+
+        return response()->json([
+            'user'=> [
+                'id' => $user->id,
+                'FristName' => $user->FristName,
+                'LastName' => $user->LastName,
+                'email' => $user->email,
+                'Phone' => $user->Phone,
+                'email_verified_at' => $user->email_verified_at],
+            'roles' => $user->getRoleNames(), // ex: ['admin']
+            'permissions' => $user->getAllPermissions()->pluck('name'), // ex: ['view orders', 'edit products']
+        ]
+
+        );
     }
 
     // Logout the User
@@ -221,10 +242,13 @@ class AuthController extends Controller
     // Generate a Token Response
     protected function respondWithToken($token)
     {
+         $user = JWTAuth::user()->load('roles', 'permissions');
         return response()->json([
-            'user' => JWTAuth::user(),
+            'user' => $user,
             'token' => $token,
             'expires_in' => JWTAuth::factory()->getTTL() * 60,
+            'roles' => $user->getRoleNames(), // ex: ['admin']
+            'permissions' => $user->getAllPermissions()->pluck('name'), // ex: ['view orders', 'edit products']
         ]);
     }
 

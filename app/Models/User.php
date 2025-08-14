@@ -13,8 +13,8 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable implements JWTSubject
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable ,HasRoles;
-
+    use HasFactory, Notifiable ;
+use HasRoles;
     /**
      * The attributes that are mass assignable.
      *
@@ -29,7 +29,7 @@ class User extends Authenticatable implements JWTSubject
         'email',
         'password',
     ];
-protected $guard_name = 'users';
+ 
     /**
      * The attributes that should be hidden for serialization.
      *

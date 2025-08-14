@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Cache;
 use App\Mail\OtpMail;
-
+use Illuminate\Support\Collection;
 
 
 class empAuthController extends Controller
@@ -67,68 +67,6 @@ class empAuthController extends Controller
     }
 
 
-    public function verify(Request $request)
-    {
-        $request->validate([
-            'email' => 'required|email',
-            'otp' => 'required|digits:6',
-        ]);
-
-        $cachedOtp = Cache::get('emp_otp_' . $request->email);
-
-        if (!$cachedOtp) {
-            return response()->json(['message' => 'OTP expired or not found'], 400);
-        }
-
-        if ($request->otp != $cachedOtp) {
-            return response()->json(['message' => 'Invalid OTP'], 400);
-        }
-
-        $employee = Employee::where('email', $request->email)->first();
-        if (!$employee) {
-            return response()->json(['message' => 'User not found'], 404);
-        }
-
-        $employee->email_verified_at = now();
-        $employee->save();
-
-        Cache::forget('emp_otp_' . $request->email);
-        Cache::forget('emp_otp_limit_' . $request->email);
-
-        // ✅ تسجيل دخول تلقائي بعد التفعيل
-        $token = JWTAuth::fromUser($employee);
-
-        return response()->json([
-            'message' => 'Email verified and login successful',
-            'employee' => $employee,
-            'token' => $token,
-            'expires_in' => JWTAuth::factory()->getTTL() * 60,
-        ]);
-    }
-
-
-    public function resendOtp(Request $request)
-    {
-        $request->validate([
-            'email' => 'required|email|exists:employees,email',
-        ]);
-
-        // تأكد ما بيكرر الإرسال كل ثانية
-        if (Cache::get('emp_otp_limit_' . $request->email)) {
-            return response()->json(['message' => 'Please wait before requesting another OTP'], 429);
-        }
-
-        // توليد كود جديد
-        $otp = rand(100000, 999999);
-        Cache::put('emp_otp_' . $request->email, $otp, now()->addMinutes(5));
-        Cache::put('emp_otp_limit_' . $request->email, true, now()->addMinute());
-
-        // إرسال الإيميل
-        Mail::to($request->email)->send(new OtpMail($otp));
-
-        return response()->json(['message' => 'OTP resent successfully']);
-    }
-
     // Login Employee
     public function login(Request $request)
     {
@@ -138,25 +76,29 @@ class empAuthController extends Controller
             'password' => $request->input('password'),
         ];
 
-        if (!$token = Auth::guard('employee')->attempt($credentials)) {
+        if (!$token = Auth::attempt($credentials)) {
             return response()->json(['error' => 'Invalid credentials'], 401);
-        }
-
+        }// supporter,Super Admin ,Moderator, warehouse worker, admin
+        if (!Auth::user()->hasAnyRole(['Moderator', 'supporter', 'Super Admin', 'warehouse worker', 'admin'])) {
+    return response()->json(['error' => 'Invalid credentials'], 401);
+}
         return $this->respondWithToken($token);
     }
 
     // Get Authenticated Employee
     public function me()
     {
-        return response()->json(Auth::guard('employee')->user());
+        $employee = Auth::user();
+
+
+        return response()->json([
+            'employee' => $employee,
+            'roles' => $employee->getRoleNames(),
+            'permissions' => $employee->getAllPermissions(),
+        ]);
     }
 
-    // Logout the Employee
-    public function logout()
-    {
-        Auth::guard('employee')->logout();
-        return response()->json(['message' => 'Successfully logged out']);
-    }
+
 
     // Refresh the Token
     public function refresh()
@@ -170,72 +112,21 @@ class empAuthController extends Controller
     // Token Response Structure
     protected function respondWithToken($token)
     {
+        $employee = Auth::user();
+
+
         return response()->json([
-            'employee' => Auth::guard('employee')->user(),
+            'user' => $employee,
             'token' => $token,
             'token_type' => 'bearer',
             'expires_in' => JWTAuth::factory()->getTTL() * 60,
+            'roles' => $employee->getRoleNames(),
+            'permissions' => $employee->getAllPermissions()->pluck('name'),
+
         ]);
     }
 
 
-    public function sendResetOtp(Request $request)
-    {
-        $request->validate([
-            'email' => 'required|email|exists:employees,email',
-        ]);
-
-        $otp = rand(100000, 999999);
-
-        Cache::put('emp_reset_otp_' . $request->email, $otp, now()->addMinutes(5));
-        Cache::put('emp_reset_otp_limit_' . $request->email, true, now()->addMinute());
-
-        Mail::to($request->email)->send(new OtpMail($otp));
-
-        return response()->json(['message' => 'Reset OTP sent to your email']);
-    }
-
-
-    public function verifyResetOtp(Request $request)
-    {
-        $request->validate([
-            'email' => 'required|email|exists:employees,email',
-            'otp' => 'required|digits:6',
-        ]);
-
-        $cachedOtp = Cache::get('emp_reset_otp_' . $request->email);
-
-        if (!$cachedOtp || $cachedOtp != $request->otp) {
-            return response()->json(['message' => 'Invalid or expired OTP'], 400);
-        }
-
-        Cache::put('emp_otp_verified_' . $request->email, true, now()->addMinutes(10));
-
-        return response()->json(['message' => 'OTP verified. You can now reset your password']);
-    }
-
-
-    public function resetPassword(Request $request)
-    {
-        $request->validate([
-            'email' => 'required|email|exists:employees,email',
-            'new_password' => 'required|min:6|confirmed',
-        ]);
-
-        if (!Cache::get('emp_otp_verified_' . $request->email)) {
-            return response()->json(['message' => 'OTP not verified'], 403);
-        }
-
-        $employee = Employee::where('email', $request->email)->first();
-        $employee->password = Hash::make($request->new_password);
-        $employee->save();
-
-        Cache::forget('emp_reset_otp_' . $request->email);
-        Cache::forget('emp_otp_verified_' . $request->email);
-        Cache::forget('emp_reset_otp_limit_' . $request->email);
-
-        return response()->json(['message' => 'Password reset successfully']);
-    }
     public function checkIn(Request $request)
     {
         $employee = auth('employee')->user();

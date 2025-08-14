@@ -8,18 +8,10 @@ use App\Models\Favorite;
 class Product extends Model
 {
     //
-        protected $fillable = [
-        'name',
-        'barcode',
-        'Photos',
-        'quantity',
-        'specifications',
-        'price',
-        'warehouse_quantity',
-        'size',
-        'dimensions',
-        'warehouse_id',
-        'main_photo',
+    protected $fillable = [
+        'name', 'barcode', 'Photos', 'main_photo', 'quantity',
+        'warehouse_quantity', 'specifications',  'weight',
+        'dimensions', 'warehouse_id', 'brand_id', 'category_id'
     ];
 protected $casts = [
     'Photos' => 'array',
@@ -29,7 +21,15 @@ public function favoritedBy()
 {
     return $this->hasMany(Favorite::class);
 }
+    public function brand()
+    {
+        return $this->belongsTo(Brand::class);
+    }
 
+    public function category()
+    {
+        return $this->belongsTo(Category::class);
+    }
 // app/Models/Product.php
 
 public function receipts()
@@ -46,6 +46,16 @@ public function returnedProducts()
 {
     return $this->hasMany(ReturnedProduct::class);
 }
+    public function variants()
+    {
+        return $this->hasMany(ProductVariant::class);
+    }
+
+    // مخزن المنتج
+    public function warehouse()
+    {
+        return $this->belongsTo(Warehouse::class);
+    }
 
 // الكمية الحالية في المخزون (ديناميك)
 public function getStockQuantityAttribute()
