@@ -9,18 +9,16 @@ class Product extends Model
 {
     //
     protected $fillable = [
-        'name', 'barcode', 'Photos', 'main_photo', 'quantity',
-        'warehouse_quantity', 'specifications',  'weight',
-        'dimensions', 'warehouse_id', 'brand_id', 'category_id'
+        'name_Ar', 'name_En','barcode', 'Photos', 'main_photo', 'specifications', 'brand_id', 'category_id'
     ];
 protected $casts = [
     'Photos' => 'array',
 ];
 // app/Models/Product.php
-public function favoritedBy()
-{
-    return $this->hasMany(Favorite::class);
-}
+// public function favoritedBy()
+// {
+//     return $this->hasMany(Favorite::class);
+// }
     public function brand()
     {
         return $this->belongsTo(Brand::class);

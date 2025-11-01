@@ -8,7 +8,9 @@ class ProductVariant extends Model
 {
     //
 
-        protected $fillable = ['product_id', 'price', 'quantity', 'sku'];
+        protected $fillable = [
+            'product_id', 'price', 'quantity', 'sku_En','sku_Ar' , 'photo', 'weight', 'dimensions', 'warehouse_id', 'warehouse_quantity', 'barcode'
+    ];
 
     public function product()
     {
@@ -28,4 +30,12 @@ class ProductVariant extends Model
                     ->withPivot('attribute_id')
                     ->withTimestamps();
     }
+    public function values()
+{
+    return $this->belongsToMany(AttributeValue::class, 'product_variant_attributes')
+                ->withPivot('attribute_id')
+                ->with('attribute') // تحميل الـ Attribute مع الـ Value
+                ->withTimestamps();
+}
+
 }

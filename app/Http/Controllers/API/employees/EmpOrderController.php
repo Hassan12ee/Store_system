@@ -106,7 +106,7 @@ class EmpOrderController extends Controller
                 'items' => $order->details->map(function ($detail) {
                     return [
                         'id'=> $detail->id,
-                        'product_id' => $detail->product_id,
+                        'product_variants_id' => $detail->product_id,
                         'product_name' => optional($detail->product)->name,
                         'quantity' => $detail->quantity,
                         'price' => $detail->price,
@@ -235,7 +235,7 @@ class EmpOrderController extends Controller
             'street'        => 'required|string',
             'comments'      => 'nullable|string',
             'order_items'   => 'required|array|min:1',
-            'order_items.*.product_id' => 'required|exists:products,id',
+            'order_items.*.product_variants_id' => 'required|exists:product_variants,id',
             'order_items.*.quantity'   => 'required|integer|min:1',
             'order_items.*.price'      => 'required|numeric|min:0',
         ]);
@@ -286,7 +286,7 @@ class EmpOrderController extends Controller
             $request->validate([
                 'address_id'    => 'nullable|exists:addresses,id', // اختيار عنوان قديم
                 'order_items'   => 'required|array|min:1',
-                'order_items.*.product_id' => 'required|exists:products,id',
+                'order_items.*.product_variants_id' => 'required|exists:products,id',
                 'order_items.*.quantity'   => 'required|integer|min:1',
                 'order_items.*.price'      => 'required|numeric|min:0',
             ]);
@@ -325,6 +325,7 @@ class EmpOrderController extends Controller
     // $randomPassword is optional, used only for guest orders
     private function createOrderDetails(Request $request, $user, $address, $employee, $randomPassword = null)
     {
+
         $order = Order::create([
             'order_date'              => now(),
             'customer_id'             => $user->id,
@@ -338,7 +339,7 @@ class EmpOrderController extends Controller
         foreach ($request->order_items as $item) {
             OrderDetail::create([
                 'order_id'   => $order->order_id,
-                'product_id' => $item['product_id'],
+                'product_variants_id' => $item['product_variants_id'],
                 'quantity'   => $item['quantity'],
                 'price'      => $item['price'],
             ]);

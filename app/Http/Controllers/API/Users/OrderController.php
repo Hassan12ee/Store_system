@@ -44,7 +44,7 @@ class OrderController extends Controller
             $totalPrice = 0;
 
             foreach ($cartItems as $item) {
-                $product = Product::findOrFail($item->product_id);
+                $product = product_variants::findOrFail($item->product_id);
 
                 $reservation = ReservedQuantity::where('user_id', $user->id)
                     ->where('product_id', $item->product_id)

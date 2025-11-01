@@ -29,4 +29,4 @@ return Application::configure(basePath: dirname(__DIR__))
         //
         $schedule->command('products:release-reserved')->everyMinute();
         $schedule->command('reservations:release')->everyMinute();
-    })->create();
+      })->create();

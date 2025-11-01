@@ -83,7 +83,7 @@ Route::prefix('auth')->controller(AuthController::class)->group(function () {
 // ====================================================================
 //
 //                              employee
-//   roles:supporter,Super Admin ,Moderator, warehouse worker, admin
+//   roles:Super Admin,Admin,Moderator,Supporter,Warehouse worker
 // ====================================================================
 
 Route::prefix('employee')->middleware(['auth:web'])->group(function () {
@@ -92,8 +92,7 @@ Route::prefix('employee')->middleware(['auth:web'])->group(function () {
         Route::middleware(['permission:add_products'])->group(function () {
             Route::post('/attributes','storeAttribute');
             Route::post('/attribute-values','storeAttributeValue');
-            Route::post('/variants','storeVariant');
-             Route::get('/getAllAttributes','getAllAttributeswithValues');
+            Route::post('/variants','storeVariant');                                           // إضافة منتج
         });
     });
 
@@ -104,8 +103,8 @@ Route::prefix('employee')->middleware(['auth:web'])->group(function () {
             Route::put('/{id}/main-photo', 'setMainPhoto');                                      // تحديد صورة رئيسية
         });
         Route::middleware(['permission:view_products'])->group(function () {
-            Route::get('/{id}', 'show');                                                        // عرض منتج مفرد
             Route::get('/', 'index');                                                           // عرض قائمة المنتجات
+            Route::get('/{id}', 'show');                                                        // عرض منتج مفرد
             Route::get('/showBarcode/{id}', 'showBarcode');                                     // عرض باركود منتج
             Route::get('/AllAttributes', 'getAllAttributesWithValues');
         });
@@ -194,6 +193,49 @@ Route::prefix('auth/emp')->controller(empAuthController::class)->group(function 
         Route::post('logout', 'logout');
     });
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // Route::get('/setup-roles-permissions', function () {
 // $role = Role::create(['name' => 'Super Admin']);

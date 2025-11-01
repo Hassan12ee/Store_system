@@ -8,10 +8,14 @@ use Illuminate\Http\Request;
 use App\Models\Product;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Cart;
+use App\Models\ProductVariant;
+use App\Models\AttributeValue;
+use App\Models\ProductVariantValue;
 use App\Models\ReservedQuantity;
 use App\Models\Wishlist;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use Milon\Barcode\DNS1D;
 
 class ProductController extends Controller
 {
@@ -20,191 +24,202 @@ class ProductController extends Controller
     use ApiResponseTrait;
 
 
-public function show($id)
-{
-    $product = Product::with([
-        'brand',
-        'category',
-        'attributes.values' // جلب الخصائص وقيمها
-    ])->find($id);
+    public function show($id)
+    {
+        $product = Product::with([
+            'brand',
+            'category',
+            'variants.values',  // جلب الخصائص وقيمها
+        ])->find($id);
 
-    if (!$product) {
-        return $this->apiResponse(null, 'Product not found', 404);
+        if (!$product) {
+            return $this->apiResponse(null, 'Product not found', 404);
+        }
+
+        return $this->apiResponse([
+            'product'       =>
+                [
+                    'id'             => $product->id,
+                    'name'           => $product->name,
+                    'Photos' => collect($product->Photos)->map(fn($photo) => asset($photo)),
+                    'main_photo'     => $product->main_photo ? asset($product->main_photo) : null,
+                    'warehouse_qty'  => $product->warehouse_quantity,
+                    'specifications' => $product->specifications,
+                    'barcode'        => $this->generateBarcodeBase64($product->barcode) ?? null,
+                    'dimensions'     => $product->dimensions,
+                    'warehouse_id'   => $product->warehouse_id,
+                    'created_at'     => $product->created_at,
+                    'updated_at'     => $product->updated_at,
+                    'variants'       => $product->variants->map(function ($variant) {
+                        return [
+                            'id'       => $variant->id,
+                            'sku'      => $variant->sku,
+                            'price'    => $variant->price,
+                            'quantity' => $variant->quantity,
+                            'photo'    => $variant->photo ? asset($variant->photo) : null,
+                            'values_with_attributes' => $variant->values->map(function ($value) {
+                                return [
+                                    'value_id' => $value->id,
+                                    'attribute_id' => $value->attribute->id,
+                                    'attribute_name' => $value->attribute->name,
+                                    'value' => $value->value,
+                                ];
+                            }),
+                        ];
+
+                    }),
+                    'brand' => $product->brand ? [
+                        'id' => $product->brand->id,
+                        'name' => $product->brand->name,
+                        'logo' => $product->brand->logo ? asset($product->brand->logo) : null,
+                    ] : null,
+                    'category' => $product->category ? [
+                        'id' => $product->category->id,
+                        'name' => $product->category->name,
+                        'image' => $product->category->image ? asset($product->category->image) : null,
+                    ] : null,
+
+                ],
+
+
+        ], 'Product details retrieved successfully', 200);
     }
 
-    return $this->apiResponse([
-        'id' => $product->id,
-        'name' => $product->name,
-        'quantity' => $product->quantity,
-        'specifications' => $product->specifications,
-        'price' => $product->price,
-        'size' => $product->size,
-        'barcode' => $product->barcode ? $this->showBarcode($product->barcode) : null,
-        'dimensions' => $product->dimensions,
-        'warehouse_id' => $product->warehouse_id,
+    // توليد باركود بصيغة Base64
+    private function generateBarcodeBase64($barcode)
+    {
+        if (empty($barcode)) {
+            return null; // أو 'No barcode'
+        }
 
-        'brand' => $product->brand ? [
-            'id' => $product->brand->id,
-            'name' => $product->brand->name,
-            'logo' => $product->brand->logo ? asset($product->brand->logo) : null,
-        ] : null,
-
-        'category' => $product->category ? [
-            'id' => $product->category->id,
-            'name' => $product->category->name,
-            'image' => $product->category->image ? asset($product->category->image) : null,
-        ] : null,
-
-        'attributes' => $product->attributes->map(function ($attribute) {
-            return [
-                'id' => $attribute->id,
-                'name' => $attribute->name,
-                'values' => $attribute->values->map(function ($value) {
-                    return [
-                        'id' => $value->id,
-                        'value' => $value->value
-                    ];
-                })
-            ];
-        }),
-
-        'Photos' => collect($product->Photos)->map(fn($photo) => asset($photo)),
-        'main_photo' => $product->main_photo ? asset($product->main_photo) : null,
-        'created_at' => $product->created_at,
-        'updated_at' => $product->updated_at,
-    ], 'Product details retrieved successfully', 200);
-}
-
-private function generateBarcodeBase64($barcode)
-{
-    if (empty($barcode)) {
-        return null; // أو 'No barcode'
+        $generator = new DNS1D();
+        $generator->setStorPath(storage_path('framework/barcodes'));
+        $barcodeImage = $generator->getBarcodePNG($barcode, 'C128', 2, 60);
+        return 'data:image/png;base64,' . $barcodeImage;
     }
 
-    $generator = new DNS1D();
-    $generator->setStorPath(storage_path('framework/barcodes'));
-    $barcodeImage = $generator->getBarcodePNG($barcode, 'C128', 2, 60);
-    return 'data:image/png;base64,' . $barcodeImage;
-}
+    // عرض جميع المنتجات
+    // هذا الدالة تعرض قائمة بجميع المنتجات مع إمكانية البحث والتصفية
+    // يمكنك إضافة المزيد من المعايير حسب الحاجة
+    // مثل: السعر، الكمية، التصنيف، إلخ.
+    public function index(Request $request)
+    {
+        $perPage       = $request->query('per_page', 10);
+        $search        = $request->query('search');
+        $sortBy        = $request->query('sort_by', 'created_at');
+        $sortDirection = $request->query('sort_direction', 'desc');
+        $minPrice      = $request->query('min_price');
+        $maxPrice      = $request->query('max_price');
+        $minQuantity   = $request->query('min_quantity');
+        $maxQuantity   = $request->query('max_quantity');
 
+        $query = Product::with([
+            'variants.values', // القيم والـ attributes المرتبطة
 
+            'brand',
+            'category'
+        ]);
 
-public function index(Request $request)
-{
-    $perPage       = $request->query('per_page', 10);
-    $search        = $request->query('search');
-    $sortBy        = $request->query('sort_by', 'created_at');
-    $sortDirection = $request->query('sort_direction', 'desc');
-    $minPrice      = $request->query('min_price');
-    $maxPrice      = $request->query('max_price');
-    $minQuantity   = $request->query('min_quantity');
-    $maxQuantity   = $request->query('max_quantity');
+        if ($search) {
+            $query->where('name', 'like', "%{$search}%");
+        }
 
-    $query = Product::with([
-        'variants.values.attribute', // القيم والـ attributes المرتبطة
-        'variants.values.attributeValue',
-        'brand',
-        'category'
-    ]);
+        if ($minPrice !== null) {
+            $query->whereHas('variants', function ($q) use ($minPrice) {
+                $q->where('price', '>=', $minPrice);
+            });
+        }
 
-    if ($search) {
-        $query->where('name', 'like', "%{$search}%");
+        if ($maxPrice !== null) {
+            $query->whereHas('variants', function ($q) use ($maxPrice) {
+                $q->where('price', '<=', $maxPrice);
+            });
+        }
+
+        if ($minQuantity !== null) {
+            $query->whereHas('variants', function ($q) use ($minQuantity) {
+                $q->where('quantity', '>=', $minQuantity);
+            });
+        }
+
+        if ($maxQuantity !== null) {
+            $query->whereHas('variants', function ($q) use ($maxQuantity) {
+                $q->where('quantity', '<=', $maxQuantity);
+            });
+        }
+
+        if (in_array($sortBy, ['name', 'created_at']) && in_array($sortDirection, ['asc', 'desc'])) {
+            $query->orderBy($sortBy, $sortDirection);
+        }
+
+        $products = $query->paginate($perPage);
+
+        $data = [
+            'current_page'   => $products->currentPage(),
+            'per_page'       => $products->perPage(),
+            'total'          => $products->total(),
+            'last_page'      => $products->lastPage(),
+            'next_page_url'  => $products->nextPageUrl(),
+            'prev_page_url'  => $products->previousPageUrl(),
+            'products'       => $products->map(function ($product) {
+                return [
+                    'id'             => $product->id,
+                    'name'           => $product->name,
+                    'main_photo'     => $product->main_photo ? asset($product->main_photo) : null,
+                    'warehouse_qty'  => $product->warehouse_quantity,
+                    'specifications' => $product->specifications,
+                    'barcode'        => $this->generateBarcodeBase64($product->barcode) ?? null,
+                    'dimensions'     => $product->dimensions,
+                    'warehouse_id'   => $product->warehouse_id,
+                    'created_at'     => $product->created_at,
+                    'updated_at'     => $product->updated_at,
+                    'variants'       => $product->variants->map(function ($variant) {
+                        return [
+                            'id'       => $variant->id,
+                            'sku'      => $variant->sku,
+                            'price'    => $variant->price,
+                            'quantity' => $variant->quantity,
+                            'photo'    => $variant->photo ? asset($variant->photo) : null,
+                            'values_with_attributes' => $variant->values->map(function ($value) {
+                                return [
+                                    'value_id' => $value->id,
+                                    'attribute_id' => $value->attribute->id,
+                                    'attribute_name' => $value->attribute->name,
+                                    'value' => $value->value,
+                                ];
+                            }),
+                        ];
+
+                    }),
+                    'brand' => $product->brand ? [
+                        'id' => $product->brand->id,
+                        'name' => $product->brand->name,
+                        'logo' => $product->brand->logo ? asset($product->brand->logo) : null,
+                    ] : null,
+                    'category' => $product->category ? [
+                        'id' => $product->category->id,
+                        'name' => $product->category->name,
+                        'image' => $product->category->image ? asset($product->category->image) : null,
+                    ] : null,
+
+                ];
+            }),
+        ];
+
+        return $this->apiResponse($data, 'Product list retrieved successfully', 200);
     }
-
-    if ($minPrice !== null) {
-        $query->whereHas('variants', function ($q) use ($minPrice) {
-            $q->where('price', '>=', $minPrice);
-        });
-    }
-
-    if ($maxPrice !== null) {
-        $query->whereHas('variants', function ($q) use ($maxPrice) {
-            $q->where('price', '<=', $maxPrice);
-        });
-    }
-
-    if ($minQuantity !== null) {
-        $query->whereHas('variants', function ($q) use ($minQuantity) {
-            $q->where('quantity', '>=', $minQuantity);
-        });
-    }
-
-    if ($maxQuantity !== null) {
-        $query->whereHas('variants', function ($q) use ($maxQuantity) {
-            $q->where('quantity', '<=', $maxQuantity);
-        });
-    }
-
-    if (in_array($sortBy, ['name', 'created_at']) && in_array($sortDirection, ['asc', 'desc'])) {
-        $query->orderBy($sortBy, $sortDirection);
-    }
-
-    $products = $query->paginate($perPage);
-
-    $data = [
-        'current_page'   => $products->currentPage(),
-        'per_page'       => $products->perPage(),
-        'total'          => $products->total(),
-        'last_page'      => $products->lastPage(),
-        'next_page_url'  => $products->nextPageUrl(),
-        'prev_page_url'  => $products->previousPageUrl(),
-        'products'       => $products->map(function ($product) {
-            return [
-                'id'             => $product->id,
-                'name'           => $product->name,
-                'main_photo'     => $product->main_photo ? asset($product->main_photo) : null,
-                'warehouse_qty'  => $product->warehouse_quantity,
-                'specifications' => $product->specifications,
-                'barcode'        => $this->generateBarcodeBase64($product->barcode) ?? null,
-                'dimensions'     => $product->dimensions,
-                'warehouse_id'   => $product->warehouse_id,
-                'created_at'     => $product->created_at,
-                'updated_at'     => $product->updated_at,
-                'variants'       => $product->variants->map(function ($variant) {
-                    return [
-                        'id'       => $variant->id,
-                        'sku'      => $variant->sku,
-                        'price'    => $variant->price,
-                        'quantity' => $variant->quantity,
-                        'photo'    => $variant->photo ? asset($variant->photo) : null,
-                        'values'   => $variant->values->map(function ($val) {
-                            return [
-                                'attribute' => $val->attributeValue->attribute->name ?? null,
-                                'value'     => $val->attributeValue->value ?? null,
-                            ];
-                        }),
-                    ];
-
-                }),
-            'brand' => $product->brand ? [
-                'id' => $product->brand->id,
-                'name' => $product->brand->name,
-                'logo' => $product->brand->logo ? asset($product->brand->logo) : null,
-            ] : null,
-            'category' => $product->category ? [
-                'id' => $product->category->id,
-                'name' => $product->category->name,
-                'image' => $product->category->image ? asset($product->category->image) : null,
-            ] : null,
-
-            ];
-        }),
-    ];
-
-    return $this->apiResponse($data, 'Product list retrieved successfully', 200);
-}
 
 
 
     public function addToCart(Request $request)
     {
         $request->validate([
-                'product_id' => 'required|exists:products,id',
+                'product_id' => 'required|exists:product_variants,id',
             ]);
 
             $user = Auth::guard('users')->user();
 
-            $product = Product::findOrFail($request->product_id);
+            $product = ProductVariant::findOrFail($request->product_id);
 
             // Check if there's already a reservation for this user & product
             $existingReservation = ReservedQuantity::where('user_id', $user->id)
@@ -279,7 +294,7 @@ public function index(Request $request)
 
     public function getCart()
     {
-        $user = Auth::guard('users')->user();
+        $user = Auth::user();
 
         $cartItems = Cart::with('product')
             ->where('user_id', $user->id)
@@ -319,9 +334,9 @@ public function index(Request $request)
         'quantity'   => 'required|integer|min:1',
         ]);
 
-        $user = Auth::guard('users')->user();
+        $user = Auth::user();
 
-        $product = Product::findOrFail($request->product_id);
+        $product = ProductVariant::findOrFail($request->product_id);
         $cart = Cart::where('user_id', $user->id)
                     ->where('product_id', $request->product_id)
                     ->first();
@@ -377,7 +392,7 @@ public function index(Request $request)
     {
 
 
-        $user = Auth::guard('users')->user();
+        $user = Auth::user();
 
         $cart = Cart::where('user_id', $user->id)
                     ->where('product_id', $id)
@@ -484,7 +499,7 @@ public function index(Request $request)
     {
 
 
-        $user = Auth::guard('users')->user();
+        $user = Auth::user();
 
         $wishlistItem = Wishlist::where('user_id', $user->id)
                                 ->where('product_id', $id)
