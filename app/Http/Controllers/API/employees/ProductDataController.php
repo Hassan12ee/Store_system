@@ -131,34 +131,20 @@ class ProductDataController extends Controller
     }
 
 
-    public function getAllAttributesWithValues()
+
+
+
+    /**
+     * عرض جميع الخصائص والقيم المرتبطة بها
+     */
+    public function getAllAttributes()
     {
-        $attributes = Attribute::with('values:id,attribute_id,value') // جلب القيم المرتبطة
-            ->get();
+        $attributes = Attribute::with('values')->get();
 
-        $result = [];
-
-        foreach ($attributes as $attribute) {
-            $attrName = strtolower($attribute->name); // زي: size, color
-            $result[$attrName] = $attribute->values->map(function ($val) {
-                return [$val->value, [$val->id]];
-            })->toArray();
-        }
-
-        return response()->json($result, 200, [], JSON_PRETTY_PRINT);
+        return response()->json([
+            'status'  => true,
+            'message' => 'Attributes retrieved successfully',
+            'data'    => $attributes
+        ]);
     }
-
-    // /**
-    //  * عرض جميع الخصائص والقيم المرتبطة بها
-    //  */
-    // public function getAllAttributes()
-    // {
-    //     $attributes = Attribute::with('values')->get();
-
-    //     return response()->json([
-    //         'status'  => true,
-    //         'message' => 'Attributes retrieved successfully',
-    //         'data'    => $attributes
-    //     ]);
-    // }
 }

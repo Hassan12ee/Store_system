@@ -15,30 +15,32 @@ use Spatie\Permission\Models\Role;
 use App\Models\User;
 use Tymon\JWTAuth\Facades\JWTAuth;
 use App\Http\Controllers\Api\employees\ProductDataController;
+use App\Http\Controllers\Api\employees\adAddressController;
 
 Route::controller(ProductController::class)->prefix('Products')->group(function () {
     Route::get('/{id}', 'show');                       // عرض منتج مفرد
     Route::get('/', 'index');                          // عرض قائمة المنتجات
 });
 // 'verified'
-Route::middleware(['auth:web'])->group(function () {
+
 
     Route::controller(ProductController::class)->group(function ()   {
-        Route::prefix('cart')->group(function () {
-            Route::post('add', 'addToCart');
-            Route::get('/', 'getCart');
-            Route::delete('{id}', 'removeFromCart');
+        // 🛒 Cart Routes
+        Route::group(['prefix' => 'cart'], function () {
+            Route::delete('/clear','clearCart'); // Clear cart
+            Route::delete('/remove/{id}','removeFromCart'); // Remove one
+            Route::post('/add','addToCart'); // Add to cart
+            Route::get('/','getCart'); // Get cart items
             Route::put('/','updateCart');
         });
-        Route::post('/favorites/add','addToFavorites');
-        Route::get('/favorites','getFavorites');
-        Route::delete('/favorites/{productId}','removeFromFavorites');
-        Route::get('/wishlist', 'getWishlist');
-        Route::post('/wishlist', 'addToWishlist');
-        Route::delete('/wishlist/{id}','removeFromWishlist');
-    });
-    Route::get('/secure', function () {
-        return response()->json(['message' => 'You are verified ✅']);
+
+        // ❤️ Wishlist Routes
+        Route::group(['prefix' => 'wishlist'], function () {
+            Route::delete('/clear','clearWishlist'); // Clear wishlist
+            Route::delete('/remove/{id}','removeFromWishlist'); // Remove one
+            Route::post('/add','addToWishlist'); // Add to wishlist
+            Route::get('/','getWishlist'); // Get wishlist items
+        });
     });
         Route::post('addresses', [AddressController::class, 'store']);
         Route::get('/addresses', [AddressController::class, 'show']);
@@ -49,36 +51,37 @@ Route::middleware(['auth:web'])->group(function () {
         Route::get('/orders/{id}', [OrderController::class, 'show']);
 
 
+    Route::prefix('auth')->controller(AuthController::class)->group(function () {
 
-});
+        // 🔐 استعادة كلمة المرور باستخدام OTP
+        Route::post('password/send-otp',     'sendResetOtp');         // إرسال OTP
+        Route::post('password/verify-otp',   'verifyResetOtp');       // التحقق من OTP
+        Route::post('password/reset',        'resetPasswordWithOtp'); // إعادة تعيين كلمة المرور
 
-Route::prefix('auth')->controller(AuthController::class)->group(function () {
+        // ✅ التحقق من البريد بعد التسجيل
+        Route::post('verify',      'verify');       // تأكيد OTP
+        Route::post('otp/resend',  'resendOtp');    // إعادة إرسال OTP
+        Route::post('/send-phone-code', [UserController::class, 'sendPhoneVerificationCode']);
+        Route::post('/verify-phone', [UserController::class, 'verifyPhoneCode']);
 
-    // 🔐 استعادة كلمة المرور باستخدام OTP
-    Route::post('password/send-otp',     'sendResetOtp');         // إرسال OTP
-    Route::post('password/verify-otp',   'verifyResetOtp');       // التحقق من OTP
-    Route::post('password/reset',        'resetPasswordWithOtp'); // إعادة تعيين كلمة المرور
+        // 📝 تسجيل وحساب جديد
+        Route::post('register', 'register');
 
-    // ✅ التحقق من البريد بعد التسجيل
-    Route::post('verify',      'verify');       // تأكيد OTP
-    Route::post('otp/resend',  'resendOtp');    // إعادة إرسال OTP
-     Route::post('/send-phone-code', [UserController::class, 'sendPhoneVerificationCode']);
-    Route::post('/verify-phone', [UserController::class, 'verifyPhoneCode']);
+        // 🔑 تسجيل دخول
+        Route::post('login', 'login');
 
-    // 📝 تسجيل وحساب جديد
-    Route::post('register', 'register');
+        // 🛡️ مسارات محمية بالتوكن
+        Route::middleware('auth:web')->group(function () {
+            Route::get('me', 'me');           // جلب بيانات المستخدم
+            Route::post('logout', 'logout'); // تسجيل الخروج
+            Route::post('refresh', 'refresh'); // تجديد التوكن
+        });
 
-    // 🔑 تسجيل دخول
-    Route::post('login', 'login');
-
-    // 🛡️ مسارات محمية بالتوكن
-    Route::middleware('auth:web')->group(function () {
-        Route::get('me', 'me');           // جلب بيانات المستخدم
-        Route::post('logout', 'logout'); // تسجيل الخروج
-        Route::post('refresh', 'refresh'); // تجديد التوكن
     });
 
-});
+
+    // route to merge guest data into user on login/order creation:
+    Route::post('/guest/merge-to-user', [GuestController::class, 'mergeToUser'])->middleware('auth:sanctum');
 
 // ====================================================================
 //
@@ -86,113 +89,129 @@ Route::prefix('auth')->controller(AuthController::class)->group(function () {
 //   roles:Super Admin,Admin,Moderator,Supporter,Warehouse worker
 // ====================================================================
 
-Route::prefix('employee')->middleware(['auth:web'])->group(function () {
-    Route::prefix('products')->group(function () {
-    Route::controller(ProductDataController::class)->group(function () {
-        Route::middleware(['permission:add_products'])->group(function () {
-            Route::post('/attributes','storeAttribute');
-            Route::post('/attribute-values','storeAttributeValue');
-            Route::post('/variants','storeVariant');                                           // إضافة منتج
+    Route::prefix('employee')->middleware(['auth:web'])->group(function () {
+        Route::prefix('products')->group(function () {
+        Route::controller(ProductDataController::class)->group(function () {
+            Route::middleware(['permission:add_products'])->group(function () {
+                Route::post('/attributes','storeAttribute');
+                Route::post('/attribute-values','storeAttributeValue');
+                Route::post('/variants','storeVariant');
+                                        // إضافة منتج
+            });
         });
-    });
 
-    Route::controller(empProductController::class)->group(function () {
-        Route::middleware(['permission:add_products'])->group(function () {
-            Route::post('/', 'store');                                                           // إضافة منتج
-            Route::post('/{id}/add-photos', 'addPhotos');                                        // رفع صور
-            Route::put('/{id}/main-photo', 'setMainPhoto');                                      // تحديد صورة رئيسية
+        Route::controller(empProductController::class)->group(function () {
+             Route::get('/showAttributes', 'getAllAttributes'); 
+            Route::middleware(['permission:add_products'])->group(function () {
+                Route::post('/', 'store');                                                           // إضافة منتج
+                Route::post('/{id}/add-photos', 'addPhotos');                                        // رفع صور
+                Route::put('/{id}/main-photo', 'setMainPhoto');                                      // تحديد صورة رئيسية
+            });
+            Route::middleware(['permission:view_products'])->group(function () {
+                Route::get('/', 'index');                                                           // عرض قائمة المنتجات
+                Route::get('/{id}', 'show');                                                        // عرض منتج مفرد
+                Route::get('/showBarcode/{id}', 'showBarcode');
+                                 // عرض باركود منتج
+
+            });
+            Route::middleware(['permission:edit_products'])->group(function () {
+                Route::put('/{id}', 'update');                                                     // تعديل منتج
+            });
+            Route::middleware(['permission:remove_products'])->group(function () {
+                Route::delete('/{id}', 'destroy');                                                 // حذف منتج
+                Route::delete('/{id}/remove-photo', 'removePhoto');                                //  حذف صورة المنتج
+            });
+            });
         });
-        Route::middleware(['permission:view_products'])->group(function () {
-            Route::get('/', 'index');                                                           // عرض قائمة المنتجات
-            Route::get('/{id}', 'show');                                                        // عرض منتج مفرد
-            Route::get('/showBarcode/{id}', 'showBarcode');                                     // عرض باركود منتج
-            Route::get('/AllAttributes', 'getAllAttributesWithValues');
-        });
-        Route::middleware(['permission:edit_products'])->group(function () {
-            Route::put('/{id}', 'update');                                                     // تعديل منتج
-        });
-        Route::middleware(['permission:remove_products'])->group(function () {
-            Route::delete('/{id}', 'destroy');                                                 // حذف منتج
-            Route::delete('/{id}/remove-photo', 'removePhoto');                                //  حذف صورة المنتج
-        });
-        });
-    });
-    Route::prefix('warehouse')->controller(WarehouseReceiptController::class)->group(function () {
-        Route::middleware(['permission:add_storage'])->group(function () {
-            Route::post('/receipts', 'store');                                               //  إضافة إيصال استلام منتج
-        });
-        Route::middleware(['permission:view_storage'])->group(function () {
-            Route::get('/receipts','filter');                                                //  فلترة ايصالات استلام المنتجات
-            Route::get('/receipts/{id}', 'show');                                            //  عرض إيصال استلام المنتج
-            Route::get('/receipts/getProductHistory/{id}','getProductHistory');              //  جلب تاريخ استلام منتج
-        });
-        // Route::middleware(['permission:edit_storage'])->group(function () {
-        //     Route::put('/receipts/{id}', 'update');                                      // تعديل إيصال استلام المنتج
-        // });
-        // Route::middleware(['permission:remove_storage'])->group(function () {
-        //     Route::delete('/receipts/{id}', 'destroy');                                  // حذف إيصال استلام المنتج
-        // });
-    });
-    Route::prefix('warehouse')->controller(WarehouseReceiptController::class)->group(function () {
-        Route::prefix('damagedProducts')->group(function () {
+        Route::prefix('warehouse')->controller(WarehouseReceiptController::class)->group(function () {
             Route::middleware(['permission:add_storage'])->group(function () {
-                Route::post('/','store');                                                   // تسجيل تالف جديد
+                Route::post('/receipts', 'store');                                               //  إضافة إيصال استلام منتج
             });
             Route::middleware(['permission:view_storage'])->group(function () {
-                Route::get('/','index');                                                    // فلترة مع pagination
+                Route::get('/receipts','filter');                                                //  فلترة ايصالات استلام المنتجات
+                Route::get('/receipts/{id}', 'show');                                            //  عرض إيصال استلام المنتج
+                Route::get('/receipts/getProductHistory/{id}','getProductHistory');              //  جلب تاريخ استلام منتج
             });
             // Route::middleware(['permission:edit_storage'])->group(function () {
-            //     Route::put('/{id}','update');                                            // تعديل تالف
+            //     Route::put('/receipts/{id}', 'update');                                      // تعديل إيصال استلام المنتج
             // });
             // Route::middleware(['permission:remove_storage'])->group(function () {
-            //     Route::delete('/{id}','destroy');                                        // حذف تالف
+            //     Route::delete('/receipts/{id}', 'destroy');                                  // حذف إيصال استلام المنتج
             // });
         });
+        Route::prefix('warehouse')->controller(WarehouseReceiptController::class)->group(function () {
+            Route::prefix('damagedProducts')->group(function () {
+                Route::middleware(['permission:add_storage'])->group(function () {
+                    Route::post('/','store');                                                   // تسجيل تالف جديد
+                });
+                Route::middleware(['permission:view_storage'])->group(function () {
+                    Route::get('/','index');                                                    // فلترة مع pagination
+                });
+                // Route::middleware(['permission:edit_storage'])->group(function () {
+                //     Route::put('/{id}','update');                                            // تعديل تالف
+                // });
+                // Route::middleware(['permission:remove_storage'])->group(function () {
+                //     Route::delete('/{id}','destroy');                                        // حذف تالف
+                // });
+            });
+        });
+        Route::prefix('orders')->controller(EmpOrderController::class)->group(function () {
+            Route::middleware(['permission:add_orders'])->group(function () {
+                Route::post('/guest-order','createOrderForGuest');                              // إنشاء طلب للزائر
+                Route::post('/existing-user-order','createOrderForExistingUser');               // إنشاء طلب لمستخدم مسجل
+            });
+            Route::middleware(['permission:view_orders'])->group(function () {
+                Route::get('/', 'index');                                                       // عرض الطلبات
+                Route::get('/{id}', 'show');                                                    // عرض طلب مفرد
+                Route::get('/filter', 'filter');                                                // فلترة الطلبات
+                Route::post('/check-phone','checkPhoneNumber');                                 // التحقق من رقم الهاتف
+            });
+            Route::middleware(['permission:edit_orders'])->group(function () {
+                Route::put('/{id}/status', 'updateStatus');                                     // تحديث حالة الطلب
+                Route::put('/{id}/update', 'updateOrder');                                           // تحديث تفاصيل الطلب
+            });
+            Route::middleware(['permission:remove_orders'])->group(function () {
+                Route::delete('/{d_id}', 'deleteProductFromOrder');                                              // حذف طلب
+            });
+        });
+        Route::controller(adAddressController::class)->group(function () {
+            Route::middleware(['permission:add_orders'])->group(function () {
+               Route::post('users/{userId}/addresses','makeNewAddresse');                      // إضافة عنوان جديد لمستخدم
+            });
+            Route::middleware(['permission:view_orders'])->group(function () {
+                Route::get('users/{userId}/addresses','getUserAddresses');                      // جلب عناوين مستخدم
+                Route::get('governorates','getGovernorates');                                   // جلب المحافظات
+                Route::get('cities/{governorateId}','getCitiesByGovernorate');                  // جلب مدن محافظة معينة
+            });
+            Route::middleware(['permission:edit_orders'])->group(function () {
+                Route::put('/{id}/address', 'updateAddress');                                   // تحديث عنوان الطلب
+            });
+            Route::middleware(['permission:remove_orders'])->group(function () {
+                Route::delete('/{id}/address', 'addressdel');                                   // حذف عنوان الطلب
+            });
+        });
+
     });
-    Route::prefix('orders')->controller(EmpOrderController::class)->group(function () {
-        Route::middleware(['permission:add_orders'])->group(function () {
-            Route::post('/guest-order','createOrderForGuest');                              // إنشاء طلب للزائر
-            Route::post('/existing-user-order','createOrderForExistingUser');               // إنشاء طلب لمستخدم مسجل
-            Route::post('users/{userId}/addresses','makeNewAddresse');                      // إضافة عنوان جديد لمستخدم
-        });
-        Route::middleware(['permission:view_orders'])->group(function () {
-            Route::get('/', 'index');                                                       // عرض الطلبات
-            Route::get('/{id}', 'show');                                                    // عرض طلب مفرد
-            Route::get('/filter', 'filter');                                                // فلترة الطلبات
-            Route::post('/check-phone','checkPhoneNumber');                                 // التحقق من رقم الهاتف
-            Route::get('users/{userId}/addresses','getUserAddresses');                      // جلب عناوين مستخدم
-        });
-        Route::middleware(['permission:edit_orders'])->group(function () {
-            Route::put('/{id}/status', 'updateStatus');                                     // تحديث حالة الطلب
-            Route::put('/{id}/address', 'updateAddress');                                   // تحديث عنوان الطلب
-            Route::put('/{id}/update', 'updateOrder');                                           // تحديث تفاصيل الطلب
-        });
-        Route::middleware(['permission:remove_orders'])->group(function () {
-            Route::delete('/{id}/address', 'addressdel');                                   // حذف عنوان الطلب
+
+
+
+    Route::prefix('auth/emp')->controller(empAuthController::class)->group(function () {
+
+        Route::post('login', 'login');      // 🔑 تسجيل الدخول
+        Route::middleware('auth:web')->group(function () {
+            // ✅ فقط الأدمن يقدر يسجل موظفين جدد
+            Route::middleware('permission:add_employee')->group(function () {
+                Route::post('register', 'register');        // تسجيل موظف جديد
+            });
+
+            // 👤 المستخدم الحالي
+            Route::get('me', 'me');
+
+            // 🔁 تجديد التوكن أو الخروج
+            Route::post('refresh', 'refresh');
+            Route::post('logout', 'logout');
         });
     });
-
-});
-
-
-
-Route::prefix('auth/emp')->controller(empAuthController::class)->group(function () {
-
-    Route::post('login', 'login');      // 🔑 تسجيل الدخول
-    Route::middleware('auth:web')->group(function () {
-        // ✅ فقط الأدمن يقدر يسجل موظفين جدد
-        Route::middleware('permission:add_employee')->group(function () {
-            Route::post('register', 'register');        // تسجيل موظف جديد
-        });
-
-        // 👤 المستخدم الحالي
-        Route::get('me', 'me');
-
-        // 🔁 تجديد التوكن أو الخروج
-        Route::post('refresh', 'refresh');
-        Route::post('logout', 'logout');
-    });
-});
 
 
 

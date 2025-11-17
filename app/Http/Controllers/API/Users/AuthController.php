@@ -21,45 +21,62 @@ class AuthController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'FristName' => 'required|string|between:2,100',
-            'LastName' => 'required|string|between:2,100',
-            'email' => 'required|string|email|max:100|unique:users',
-            'password' => 'required|string|min:6',
-            'Birthday' => 'required|date',
-            'Phone' => 'required|numeric|digits_between:7,15',
-            'Gender' => 'required|in:Male,Female',
+            'LastName'  => 'required|string|between:2,100',
+            'email'     => 'required|string|email|max:100|unique:users',
+            'password'  => 'required|string|min:6',
+            'Birthday'  => 'required|date',
+            'Phone'     => 'required|numeric|digits_between:7,15',
+            'Gender'    => 'required|in:Male,Female',
         ]);
 
         if ($validator->fails()) {
             return response()->json($validator->errors(), 422);
         }
 
-        $user = User::create([
-            'FristName' => $request->FristName,
-            'LastName' => $request->LastName,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'Birthday' => $request->Birthday,
-            'Phone' => $request->Phone,
-            'Gender' => $request->Gender,
-        ]);
+        DB::beginTransaction();
+        try {
+            // 🧍‍♂️ إنشاء المستخدم
+            $user = User::create([
+                'FristName' => $request->FristName,
+                'LastName'  => $request->LastName,
+                'email'     => $request->email,
+                'password'  => Hash::make($request->password),
+                'Birthday'  => $request->Birthday,
+                'Phone'     => $request->Phone,
+                'Gender'    => $request->Gender,
+            ]);
 
-        // ✅ توليد وحفظ الـ OTP
-        $otp = rand(100000, 999999);
-        Cache::put('otp_' . $user->email, $otp, now()->addMinutes(5));
-        Cache::put('otp_sent_recently_' . $user->email, true, now()->addMinute());
+            // ✅ دمج بيانات الجيست (لو موجود guest_id)
+            if ($request->filled('guest_id')) {
+                $this->mergeGuestDataToUser($request->guest_id, $user->id);
+            }
 
-        // ✅ إرسال البريد
-        Mail::to($user->email)->send(new OtpMail($otp));
+            // ✅ توليد وحفظ الـ OTP
+            $otp = rand(100000, 999999);
+            Cache::put('otp_' . $user->email, $otp, now()->addMinutes(5));
+            Cache::put('otp_sent_recently_' . $user->email, true, now()->addMinute());
 
-        // ✅ توليد توكن JWT
-        $token = JWTAuth::fromUser($user);
+            // ✅ إرسال البريد
+            Mail::to($user->email)->send(new OtpMail($otp));
 
-        return response()->json([
-            'message' => 'User registered successfully. OTP sent to email.',
-            'user' => $user,
-            'token' => $token,
-        ], 201);
+            // ✅ توليد توكن JWT
+            $token = JWTAuth::fromUser($user);
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'User registered successfully. OTP sent to email.',
+                'user'    => $user,
+                'token'   => $token,
+            ], 201);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => 'Registration failed', 'details' => $e->getMessage()], 500);
+        }
     }
+
+
 
     //verify the Email
     public function verify(Request $request)
@@ -181,10 +198,39 @@ class AuthController extends Controller
         ]);
     }
 
+    private function mergeGuestDataToUser($guestId, $userId)
+    {
+        if (!$guestId || !$userId) {
+            return;
+        }
+
+        // 🛒 نقل الكارت من الجيست إلى اليوزر
+        Cart::where('guest_id', $guestId)
+            ->update([
+                'user_id' => $userId,
+                'guest_id' => null,
+            ]);
+
+        // 💖 نقل الويشلست من الجيست إلى اليوزر
+        Wishlist::where('guest_id', $guestId)
+            ->update([
+                'user_id' => $userId,
+                'guest_id' => null,
+            ]);
+
+        // 🧾 لو عندك ReservedQuantity كمان
+        ReservedQuantity::where('guest_id', $guestId)
+            ->update([
+                'user_id' => $userId,
+                'guest_id' => null,
+            ]);
+    }
+
     // Login User
-        public function login(Request $request)
+    public function login(Request $request)
     {
         $loginField = filter_var($request->input('login'), FILTER_VALIDATE_EMAIL) ? 'email' : 'Phone';
+
         $credentials = [
             $loginField => $request->input('login'),
             'password' => $request->input('password'),
@@ -193,11 +239,18 @@ class AuthController extends Controller
         if (!$token = JWTAuth::attempt($credentials)) {
             return response()->json(['error' => 'Invalid credentials'], 401);
         }
+
         $user = JWTAuth::user();
 
         if (!$user) {
-                return response()->json(['error' => 'User not found'], 404);
+            return response()->json(['error' => 'User not found'], 404);
         }
+
+        // ✅ دمج بيانات الجيست لو أرسلها من الواجهة (guest_id)
+        if ($request->filled('guest_id')) {
+            $this->mergeGuestDataToUser($request->guest_id, $user->id);
+        }
+
         return $this->respondWithToken($token);
     }
 

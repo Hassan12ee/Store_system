@@ -23,7 +23,24 @@ class empProductController extends Controller
     //
     use ApiResponseTrait;
 
+    public function getAllAttributes()
+    {
+            //     $attributes = Attribute::with('values')->get();
 
+
+        $attributes = Attribute::with('values:id,attribute_id,value')->get();
+
+        $result = [];
+
+        foreach ($attributes as $attribute) {
+            $attrName = strtolower($attribute->name); // زي: size, color
+            $result[$attrName] = $attribute->values->map(function ($val) {
+                return [$val->value, [$val->id]];
+            })->toArray();
+        }
+
+        return response()->json($result, 200, [], JSON_PRETTY_PRINT);
+    }
     // اضافة منتج جديد
     public function store(Request $request)
     {
@@ -36,7 +53,8 @@ class empProductController extends Controller
             'brand_id' => 'nullable|integer|exists:brands,id',
             'category_id' => 'nullable|integer|exists:categories,id',
 
-            'sku' => 'nullable|string|max:100',
+            'sku_Ar' => 'nullable|string|max:100',
+            'sku_En' => 'nullable|string|max:100',
             'price' => 'required|numeric|min:0',
             'quantity' => 'required|integer|min:0',
             'dimensions' => 'nullable|string',
@@ -84,7 +102,8 @@ class empProductController extends Controller
             // 5️⃣ إنشاء المتغير
             $variant = ProductVariant::create([
                 'product_id' => $product->id,
-                'sku'        => $request->sku ?? null,
+                'sku_Ar'        => $request->sku ?? null,
+                'sku_En'        => $request->sku_En ?? null,
                 'price'      => $request->price,
                 'quantity'   => $request->quantity,
                 'weight' => $request->weight,
@@ -169,17 +188,6 @@ class empProductController extends Controller
             'specifications' => 'nullable|string',
             'brand_id' => 'nullable|integer|exists:brands,id',
             'category_id' => 'nullable|integer|exists:categories,id',
-
-            'sku' => 'nullable|string|max:100',
-            'price' => 'required|numeric|min:0',
-            'quantity' => 'required|integer|min:0',
-            'dimensions' => 'nullable|string',
-            'weight' => 'nullable|string',
-            'warehouse_id' => 'required|integer|exists:warehouses,id',
-            'warehouse_quantity'=> 'nullable|integer|min:0',
-            'variant_photo' => 'nullable|file|image|max:200048',
-            'attribute_values' => 'nullable|array',
-            'attribute_values.*' => 'integer|exists:attribute_values,id',
         ]);
 
         if ($validator->fails()) {
@@ -205,34 +213,9 @@ class empProductController extends Controller
                 'brand_id' => $request->brand_id,
                 'category_id' => $request->category_id,
                 'Photos' => $product->Photos,
-                // لا نقوم بتحديث الباركود لأنه فريد ولا يتغير
             ]);
 
-            // 3️⃣ رفع صورة المتغير
-            $variantPhoto = null;
-            if ($request->hasFile('variant_photo')) {
-                $variantPhoto = 'storage/' . $request->file('variant_photo')->store('variants', 'public');
-            }
-            $variant = Variants::create([
-                'product_id' => $product->id,
-                'sku'        => $request->sku ?? null,
-                'price'      => $request->price,
-                'quantity'   => $request->quantity,
-                'photo'      => $variantPhoto,
-            ]);
-            $variant->variants()->save($variant);
 
-            // 4️⃣ ربط القيم (Attributes) بالمتغير باستخدام attach
-            $attachData = [];
-            if ($request->attribute_values) {
-                foreach ($request->attribute_values as $valueId) {
-                    $attributeValue = AttributeValue::find($valueId);
-                    if ($attributeValue) {
-                        $attachData[$valueId] = ['attribute_id' => $attributeValue->attribute_id];
-                    }
-                }
-                $variant->attributeValues()->sync($attachData);
-            }
             DB::commit();
             // 5️⃣ إرجاع المنتج مع المتغيرات والقيم
             return response()->json([
@@ -248,7 +231,74 @@ class empProductController extends Controller
             ], 500);
         }
     }
+    public function updatevariant(Request $request, $id)
+    {
+        $product = ProductVariant::find($id);
+        if (!$product) {
+            return response()->json(['status' => false, 'message' => 'Product not found'], 404);
+        }
 
+        $validator = Validator::make($request->all(), [
+            'sku_Ar' => 'nullable|string|max:100',
+            'sku_En' => 'nullable|string|max:100',
+            'price' => 'required|numeric|min:0',
+            'quantity' => 'required|integer|min:0',
+            'dimensions' => 'nullable|string',
+            'weight' => 'nullable|string',
+            'variant_photo' => 'nullable|file|image|max:200048',
+            'attribute_values' => 'nullable|array',
+            'attribute_values.*' => 'integer|exists:attribute_values,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'message' => $validator->errors()], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+                    // 3️⃣ رفع صورة المتغير
+            $variantPhoto = null;
+            if ($request->hasFile('variant_photo')) {
+                $variantPhoto = 'storage/' . $request->file('variant_photo')->store('variants', 'public');
+            }
+            $variant = Variants::create([
+                'sku_Ar'        => $request->sku_Ar ?? null,
+                'sku_En'        => $request->sku_En ?? null,
+                'price'      => $request->price,
+                'quantity'   => $request->quantity,
+                'dimensions' => $request->dimensions,
+                'weight' => $request->weight,
+                'photo'      => $variantPhoto,
+            ]);
+            $variant->variants()->save($variant);
+
+            // 4️⃣ ربط القيم (Attributes) بالمتغير باستخدام attach
+            $attachData = [];
+            if ($request->attribute_values) {
+                foreach ($request->attribute_values as $valueId) {
+                    $attributeValue = AttributeValue::find($valueId);
+                    if ($attributeValue) {
+                        $attachData[$valueId] = ['attribute_id' => $attributeValue->attribute_id];
+                    }
+                }
+                $variant->attributeValues()->sync($attachData);
+            }
+
+            DB::commit();
+            // 5️⃣ إرجاع المنتج مع المتغيرات والقيم
+            return response()->json([
+                'status' => true,
+                'message' => 'Product updated successfully',
+                'data' => $product->load('variants.attributeValues.attribute'),
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => false,
+                'message' => 'Error updating product: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
 
     //اضافة صور للمنتج
     public function addPhotos(Request $request, $id)
@@ -333,65 +383,62 @@ class empProductController extends Controller
     // هذا الدالة تعرض تفاصيل منتج معين بما في ذلك الخصائص والقيم
     public function show($id)
     {
-        $product = Product::with([
-            'brand',
-            'category',
-            'variants.values',  // جلب الخصائص وقيمها
-        ])->find($id);
+            $product = ProductVariant::with([
+                'Product', // القيم والـ attributes المرتبطة
+                'Product.brand',
+                'Product.category'
+            ])->find($id);
 
-        if (!$product) {
-            return $this->apiResponse(null, 'Product not found', 404);
-        }
+            if (!$product) {
+                return $this->apiResponse(null, 'Product not found', 404);
+            }
 
-
-        return $this->apiResponse([
-            'product'       =>
-                [
-                     'id'             => $product->id,
-                    'name_Ar'           => $product->name_Ar,
-                    'name_En'           => $product->name_En,
-                    'Photos' => collect($product->Photos)->map(fn($photo) => asset($photo)),
-                    'main_photo'     => $product->main_photo ? asset($product->main_photo) : null,
-                    'specifications' => $product->specifications,
-                    'created_at'     => $product->created_at,
-                    'updated_at'     => $product->updated_at,
-                    'variants'       => $product->variants->map(function ($variant) {
+            return $this->apiResponse([
+                'product'       => [
+                    'sku_id'       => $product->id,
+                    'product_id'             => $product->product->id,
+                    'name_Ar'           => $product->product->name_Ar,
+                    'name_En'           => $product->product->name_En,
+                    'sku_Ar'      => $product->sku_Ar,
+                    'sku_En'      => $product->sku_En,
+                    'Photos' => collect($product->product->Photos)->map(fn($photo) => asset($photo)),
+                    'main_photo'     => $product->product->main_photo ? asset($product->main_photo) : null,
+                    'photo'    => $product->photo ? asset($variant->photo) : null,
+                    'price'    => $product->price,
+                    'quantity' => $product->quantity,
+                    'warehouse_qty'  => $product->warehouse_quantity,
+                    'specifications' => $product->product->specifications,
+                    'dimensions'     => $product->dimensions,
+                    'warehouse_id'   => $product->warehouse_id,
+                    'barcode'        => $this->generateBarcodeBase64($product->barcode) ?? null,
+                    'values_with_attributes' => $product->values->map(function ($value) {
                         return [
-                            'id'       => $variant->id,
-                            'sku'      => $variant->sku,
-                            'price'    => $variant->price,
-                            'quantity' => $variant->quantity,
-                            'warehouse_qty'  => $variant->warehouse_quantity,
-                            'photo'    => $variant->photo ? asset($variant->photo) : null,
-                            'dimensions'     => $variant->dimensions,
-                            'warehouse_id'   => $variant->warehouse_id,
-                            'barcode'        => $this->generateBarcodeBase64($variant->barcode) ?? null,
-                            'values_with_attributes' => $variant->values->map(function ($value) {
-                                return [
-                                    'value_id' => $value->id,
-                                    'attribute_id' => $value->attribute->id,
-                                    'attribute_name' => $value->attribute->name,
-                                    'value' => $value->value,
-                                ];
-                            }),
-                        ];
-
+                            'value_id' => $value->id,
+                            'attribute_id' => $value->attribute->id,
+                            'attribute_name' => $value->attribute->name,
+                            'value' => $value->value,
+                            ];
                     }),
-                    'brand' => $product->brand ? [
-                        'id' => $product->brand->id,
-                        'name' => $product->brand->name,
-                        'logo' => $product->brand->logo ? asset($product->brand->logo) : null,
+                    'brand' => $product->product->brand ? [
+                        'id' => $product->product->brand->id,
+                        'name' => $product->product->brand->name,
+                        'logo' => $product->product->brand->logo ? asset($product->product->brand->logo) : null,
                     ] : null,
                     'category' => $product->category ? [
-                        'id' => $product->category->id,
-                        'name' => $product->category->name,
-                        'image' => $product->category->image ? asset($product->category->image) : null,
+                        'id' => $product->product->category->id,
+                        'name' => $product->product->category->name,
+                        'image' => $product->product->category->image ? asset($product->product->category->image) : null,
                     ] : null,
-        ],
+                    'created_at'     => $product->product->created_at,
+                    'updated_at'     => $product->product->updated_at,
+
+                    ],
 
 
-        ], 'Product details retrieved successfully', 200);
+
+            ], 'Product details retrieved successfully', 200);
     }
+
 
     // توليد باركود بصيغة Base64
     private function generateBarcodeBase64($barcode)
@@ -421,38 +468,40 @@ class empProductController extends Controller
         $minQuantity   = $request->query('min_quantity');
         $maxQuantity   = $request->query('max_quantity');
 
-        $query = Product::with([
-            'variants.values', // القيم والـ attributes المرتبطة
-            'brand',
-            'category'
+        $query = ProductVariant::with([
+            'Product', // القيم والـ attributes المرتبطة
+            'Product.brand',
+            'Product.category'
         ]);
 
         if ($search) {
-            $query->where('name', 'like', "%{$search}%");
+             $query->whereHas('product', function ($q) use ($search) {
+            $q->where('name_Ar', 'like', "%{$search}%");
+            });
         }
 
         if ($minPrice !== null) {
-            $query->whereHas('variants', function ($q) use ($minPrice) {
-                $q->where('price', '>=', $minPrice);
-            });
+
+                $query->where('price', '>=', $minPrice);
+
         }
 
         if ($maxPrice !== null) {
-            $query->whereHas('variants', function ($q) use ($maxPrice) {
-                $q->where('price', '<=', $maxPrice);
-            });
+
+                $query->where('price', '<=', $maxPrice);
+
         }
 
         if ($minQuantity !== null) {
-            $query->whereHas('variants', function ($q) use ($minQuantity) {
-                $q->where('quantity', '>=', $minQuantity);
-            });
+
+                $query->where('quantity', '>=', $minQuantity);
+
         }
 
         if ($maxQuantity !== null) {
-            $query->whereHas('variants', function ($q) use ($maxQuantity) {
-                $q->where('quantity', '<=', $maxQuantity);
-            });
+
+                $query->where('quantity', '<=', $maxQuantity);
+
         }
 
         if (in_array($sortBy, ['name', 'created_at']) && in_array($sortDirection, ['asc', 'desc'])) {
@@ -470,46 +519,42 @@ class empProductController extends Controller
             'prev_page_url'  => $products->previousPageUrl(),
             'products'       => $products->map(function ($product) {
                 return [
-                    'id'             => $product->id,
-                    'name_Ar'           => $product->name_Ar,
-                    'name_En'           => $product->name_En,
-                    'Photos' => collect($product->Photos)->map(fn($photo) => asset($photo)),
-                    'main_photo'     => $product->main_photo ? asset($product->main_photo) : null,
-                    'specifications' => $product->specifications,
-                    'created_at'     => $product->created_at,
-                    'updated_at'     => $product->updated_at,
-                    'variants'       => $product->variants->map(function ($variant) {
+                    'sku_id'       => $product->id,
+                    'product_id'             => $product->product->id,
+                    'name_Ar'           => $product->product->name_Ar,
+                    'name_En'           => $product->product->name_En,
+                    'sku_Ar'      => $product->sku_Ar,
+                    'sku_En'      => $product->sku_En,
+                    'Photos' => collect($product->product->Photos)->map(fn($photo) => asset($photo)),
+                    'main_photo'     => $product->product->main_photo ? asset($product->main_photo) : null,
+                    'photo'    => $product->photo ? asset($variant->photo) : null,
+                    'price'    => $product->price,
+                    'quantity' => $product->quantity,
+                    'warehouse_qty'  => $product->warehouse_quantity,
+                    'specifications' => $product->product->specifications,
+                    'dimensions'     => $product->dimensions,
+                    'warehouse_id'   => $product->warehouse_id,
+                    'barcode'        => $this->generateBarcodeBase64($product->barcode) ?? null,
+                    'values_with_attributes' => $product->values->map(function ($value) {
                         return [
-                            'id'       => $variant->id,
-                            'sku'      => $variant->sku,
-                            'price'    => $variant->price,
-                            'quantity' => $variant->quantity,
-                            'warehouse_qty'  => $variant->warehouse_quantity,
-                            'photo'    => $variant->photo ? asset($variant->photo) : null,
-                            'dimensions'     => $variant->dimensions,
-                            'warehouse_id'   => $variant->warehouse_id,
-                            'barcode'        => $this->generateBarcodeBase64($variant->barcode) ?? null,
-                            'values_with_attributes' => $variant->values->map(function ($value) {
-                                return [
-                                    'value_id' => $value->id,
-                                    'attribute_id' => $value->attribute->id,
-                                    'attribute_name' => $value->attribute->name,
-                                    'value' => $value->value,
-                                ];
-                            }),
-                        ];
-
+                            'value_id' => $value->id,
+                            'attribute_id' => $value->attribute->id,
+                            'attribute_name' => $value->attribute->name,
+                            'value' => $value->value,
+                            ];
                     }),
-                    'brand' => $product->brand ? [
-                        'id' => $product->brand->id,
-                        'name' => $product->brand->name,
-                        'logo' => $product->brand->logo ? asset($product->brand->logo) : null,
+                    'brand' => $product->product->brand ? [
+                        'id' => $product->product->brand->id,
+                        'name' => $product->product->brand->name,
+                        'logo' => $product->product->brand->logo ? asset($product->product->brand->logo) : null,
                     ] : null,
                     'category' => $product->category ? [
-                        'id' => $product->category->id,
-                        'name' => $product->category->name,
-                        'image' => $product->category->image ? asset($product->category->image) : null,
+                        'id' => $product->product->category->id,
+                        'name' => $product->product->category->name,
+                        'image' => $product->product->category->image ? asset($product->product->category->image) : null,
                     ] : null,
+                    'created_at'     => $product->product->created_at,
+                    'updated_at'     => $product->product->updated_at,
 
                 ];
             }),

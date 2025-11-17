@@ -7,6 +7,7 @@ use App\Models\Address;
 use App\Models\Order;
 use App\Models\OrderDetail;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -20,17 +21,17 @@ class EmpOrderController extends Controller
     // يمكن استخدام هذا الجزء في عرض الطلبات للموظفين
     public function index(Request $request)
     {
-        $query = Order::with(['details.product', 'address', 'customer']);
+        $query = Order::with(['details.product', 'address','address.governorate','address.city', 'customer']);
 
-        if ($request->filled('governorate')) {
+        if ($request->filled('governorate_id')) {
             $query->whereHas('address', function ($q) use ($request) {
-                $q->where('governorate', $request->governorate);
+                $q->where('governorate_id', $request->governorate);
             });
         }
 
-        if ($request->filled('city')) {
+        if ($request->filled('city_id')) {
             $query->whereHas('address', function ($q) use ($request) {
-                $q->where('city', $request->city);
+                $q->where('city_id', $request->city);
             });
         }
 
@@ -85,7 +86,7 @@ class EmpOrderController extends Controller
     // عرض تفاصيل طلب معين
     public function show($id)
     {
-        $order = Order::with(['details.product', 'address', 'customer'])->findOrFail($id);
+        $order = Order::with(['details.product', 'address','address.governorate','address.city', 'customer'])->findOrFail($id);
 
         return response()->json([
             'status' => true,
@@ -120,7 +121,7 @@ class EmpOrderController extends Controller
     // فلترة متقدمة: حسب التاريخ أو العميل
     public function filter(Request $request)
     {
-        $query = Order::with(['details.product', 'address', 'customer']);
+        $query = Order::with(['details.product', 'address','address.governorate','address.city', 'customer']);
 
         if ($request->filled('customer_id')) {
             $query->where('customer_id', $request->customer_id);
@@ -235,7 +236,7 @@ class EmpOrderController extends Controller
             'street'        => 'required|string',
             'comments'      => 'nullable|string',
             'order_items'   => 'required|array|min:1',
-            'order_items.*.product_variants_id' => 'required|exists:product_variants,id',
+            'order_items.*.product_id' => 'required|exists:product_variants,id',
             'order_items.*.quantity'   => 'required|integer|min:1',
             'order_items.*.price'      => 'required|numeric|min:0',
         ]);
@@ -286,7 +287,7 @@ class EmpOrderController extends Controller
             $request->validate([
                 'address_id'    => 'nullable|exists:addresses,id', // اختيار عنوان قديم
                 'order_items'   => 'required|array|min:1',
-                'order_items.*.product_variants_id' => 'required|exists:products,id',
+                'order_items.*.product_id' => 'required|exists:product_variants,id',
                 'order_items.*.quantity'   => 'required|integer|min:1',
                 'order_items.*.price'      => 'required|numeric|min:0',
             ]);
@@ -339,7 +340,7 @@ class EmpOrderController extends Controller
         foreach ($request->order_items as $item) {
             OrderDetail::create([
                 'order_id'   => $order->order_id,
-                'product_variants_id' => $item['product_variants_id'],
+                'product_id' => $item['product_id'],
                 'quantity'   => $item['quantity'],
                 'price'      => $item['price'],
             ]);
@@ -368,60 +369,7 @@ class EmpOrderController extends Controller
         return response()->json($response, 201);
     }
 
-    // إنشاء عنوان جديد للمستخدم
-    // هذا الجزء يستخدم في إنشاء عنوان جديد للمستخدمين عند الطلبات
-    public function makeNewAddresse(Request $request , $user_id)
-    {
 
-        $user = User::find($user_id);
-        if (!$user) {
-            return response()->json([
-                'status' => false,
-                'message' => 'User not found.',
-            ], 404);
-        }
-
-        $request->validate([
-            'governorate' => 'required|string',
-            'city' => 'required|string',
-            'street' => 'required|string',
-            'comments' => 'nullable|string',
-        ]);
-
-        $address = Address::create([
-            'user_id' => $user->id,
-            'governorate' => $request->governorate,
-            'city' => $request->city,
-            'street' => $request->street,
-            'comments' => $request->comments,
-        ]);
-
-        return response()->json([
-            'status' => true,
-            'message' => 'Address created successfully.',
-            'data' => $address,
-        ], 201);
-    }
-
-    // الحصول على عناوين المستخدم
-    // هذا الجزء يستخدم في عرض عناوين المستخدمين عند الطلبات
-    public function getUserAddresses($userId)
-    {
-        $user = User::find($userId);
-        if (!$user) {
-            return response()->json([
-                'status' => false,
-                'message' => 'User not found.',
-            ], 404);
-        }
-
-        $addresses = $user->addresses()->get();
-
-        return response()->json([
-            'status' => true,
-            'data' => $addresses,
-        ]);
-    }
 
     // تحديث طلب
     // هذا الجزء يستخدم في تحديث الطلبات الموجودة
@@ -446,10 +394,9 @@ public function updateOrder(Request $request, $id)
         'customer.Phone' => 'nullable|string',
         'items' => 'array',
         'items.*.id' => 'nullable|integer', // order_details.id
-        'items.*.product_id' => 'required|integer|exists:products,id',
-        'items.*.quantity' => 'required|integer|min:1',
-        'items.*.price' => 'required|numeric|min:0',
-        'items.*._delete' => 'boolean'
+        'items.*.product_id' => 'nullable|integer|exists:product_variants,id',
+        'items.*.quantity' => 'nullable|integer|min:1',
+        'items.*.price' => 'nullable|numeric|min:0',
     ]);
 
     DB::beginTransaction();
@@ -487,23 +434,11 @@ public function updateOrder(Request $request, $id)
 
         foreach ($validated['items'] as $item) {
 
-            // 🗑 حذف منتج
-            if (!empty($item['_delete']) && !empty($item['id'])) {
-                $detail = $order->details()->where('id', $item['id'])->first();
-                if ($detail) {
-                    $product = Product::find($detail->product_id);
-                    $product->quantity += $detail->quantity; // رجع الكمية
-                    $product->save();
-                    $detail->delete();
-                }
-                continue;
-            }
-
             // ✏ تعديل منتج موجود
             if (!empty($item['id'])) {
                 $detail = $order->details()->where('id', $item['id'])->first();
                 if ($detail) {
-                    $product = Product::findOrFail($item['product_id']);
+                    $product = ProductVariant::findOrFail($item['product_id']);
                     $oldQty = $detail->quantity;
                     $newQty = $item['quantity'];
                     $diff = $newQty - $oldQty;
@@ -528,7 +463,7 @@ public function updateOrder(Request $request, $id)
 
             // ➕ إضافة منتج جديد
             else {
-                $product = Product::findOrFail($item['product_id']);
+                $product = ProductVariant::findOrFail($item['product_id']);
                 if ($product->quantity < $item['quantity']) {
                     throw new \Exception("Not enough stock for {$product->name}");
                 }
@@ -558,43 +493,34 @@ public function updateOrder(Request $request, $id)
         ], 400);
     }
 }
+public function deleteProductFromOrder($detailId)
+{
+    DB::beginTransaction();
 
-    // حذف عنوان
-    // هذا الجزء يستخدم في حذف عنوان من قاعدة البيانات
-    public function addressdel(Request $request)
-    {
-        $request->validate([
-            'address_id' => 'required|exists:addresses,id',
-        ]);
+    try {
+        $detail = OrderDetail::findOrFail($detailId);
+        // استرجاع الكمية للمخزون
+        $product = ProductVariant::findOrFail($detail->product_id);
+        $product->quantity += $detail->quantity;
+        $product->save();
 
-        $address = Address::findOrFail($request->address_id);
-        $address->delete();
+        // حذف تفاصيل الطلب
+        $detail->delete();
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Address deleted successfully.',
-        ]);
-    }
-
-    // تحديث عنوان
-    // هذا الجزء يستخدم في تحديث عنوان موجود في قاعدة البيانات
-    // يمكن استخدامه في تعديل تفاصيل العنوان مثل المحافظة والمدينة والشارع والتعليقات
-    public function updateAddress(Request $request, $id)
-    {
-        $request->validate([
-            'governorate' => 'required|string',
-            'city' => 'required|string',
-            'street' => 'required|string',
-            'comments' => 'nullable|string',
-        ]);
-
-        $address = Address::findOrFail($id);
-        $address->update($request->only(['governorate', 'city', 'street', 'comments']));
+        DB::commit();
 
         return response()->json([
             'status' => true,
-            'message' => 'Address updated successfully.',
-            'data' => $address,
+            'message' => 'Product removed from order successfully'
         ]);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return response()->json([
+            'status' => false,
+            'message' => $e->getMessage()
+        ], 400);
     }
+}
+
 }

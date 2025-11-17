@@ -8,6 +8,8 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Auth;
 use Tymon\JWTAuth\Facades\JWTAuth;
+use App\Models\Citie;
+use App\Models\Governorate;
 
 class AddressController extends Controller
 {
@@ -16,8 +18,19 @@ class AddressController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'governorate' => 'required|string',
-            'city' => 'required|string',
+            'governorate' => 'required|numeric|min:1|max:27|exists:governorates,id',
+            'city' => [
+                        'required',
+                        'min:1',
+                        'max:396',
+                        'exists:cities,id',
+                        function ($attribute, $value, $fail) use ($request) {
+                            $city = Citie::find($value);
+                            if (!$city || $city->governorate_id != $request->governorate) {
+                                $fail('المدينة لا تنتمي إلى المحافظة المحددة.');
+                            }
+                        },
+                    ],
             'street' => 'required|string',
             'comments' => 'nullable|string',
         ]);
@@ -29,8 +42,8 @@ class AddressController extends Controller
         }
 
         $address = new Address([
-            'governorate' => $request->governorate,
-            'city' => $request->city,
+            'governorate_id' => $request->governorate,
+            'city_id' => $request->city,
             'street' => $request->street,
             'comments' => $request->comments,
         ]);
@@ -55,12 +68,29 @@ class AddressController extends Controller
             return response()->json(['status' => false, 'message' => 'Unauthorized'], 401);
         }
 
-        $addresses = $user->addresses()->get();
+        $addresses = $user->addresses()->with([
+            'governorate', // القيم والـ attributes المرتبطة
+            'city'
+        ])->get();
 
         return response()->json([
-            'status' => true,
-            'data' => $addresses
+                            'status' => true,
+                            'data' => $addresses->map(function ($address) {
+                                return [
+                                    "id" => $address->id,
+                                    "user_id" => $address->user_id,
+                                    "employee_id" => $address->employee_id,
+                                    "governorate_name_ar" => $address->governorate?->governorate_name_ar ?? null,
+                                    "governorate_name_en" => $address->governorate?->governorate_name_en ?? null,
+                                    "city_name_ar" => $address->city?->city_name_ar ?? null,
+                                    "city_name_en" => $address->city?->city_name_en ?? null,
+                                    "street" => $address->street,
+                                    "comments" => $address->comments,
+                                ];
+
+                            })
         ]);
+
     }
 
 
@@ -74,9 +104,20 @@ class AddressController extends Controller
         }
 
         $request->validate([
-            'governorate' => 'required|string',
-            'city' => 'required|string',
-            'street' => 'required|string',
+            'governorate' => 'numeric|min:1|max:27|exists:governorates,id',
+            'city' => [
+
+                        'min:1',
+                        'max:396',
+                        'exists:cities,id',
+                        function ($attribute, $value, $fail) use ($request) {
+                            $city = Citie::find($value);
+                            if (!$city || $city->governorate_id != $request->governorate) {
+                                $fail('المدينة لا تنتمي إلى المحافظة المحددة.');
+                            }
+                        },
+                    ],
+            'street' => 'nullable|string',
             'comments' => 'nullable|string',
         ]);
 
@@ -87,8 +128,8 @@ class AddressController extends Controller
         }
 
         $address->update([
-            'governorate' => $request->governorate,
-            'city' => $request->city,
+            'governorate_id' => $request->governorate,
+            'city_id' => $request->city,
             'street' => $request->street,
             'comments' => $request->comments,
         ]);
