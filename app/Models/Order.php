@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\OrderConfirmAttempt;
+use App\Models\OrderConfirmationSession;
 
 class Order extends Model
 {
@@ -38,6 +40,13 @@ class Order extends Model
     {
         return $this->hasMany(OrderDetail::class, 'order_id');
     }
-
+    public function Attempts()
+    {
+        return $this->hasMany(OrderConfirmAttempt::class, 'order_id');
+    }
+    public function Sessions()
+    {
+        return $this->hasMany(OrderConfirmationSession::class, 'order_id');
+    }
 }
 

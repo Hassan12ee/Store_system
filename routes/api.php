@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\employees\empAuthController;
 use App\Http\Controllers\API\employees\EmpOrderController;
+use App\Http\Controllers\API\employees\EmpConfirmOrderController;
 use App\Http\Controllers\Api\employees\empProductController;
 use App\Http\Controllers\Api\employees\WarehouseReceiptController;
 use App\http\Controllers\Api\Users\AddressController;
@@ -95,23 +96,23 @@ Route::controller(ProductController::class)->prefix('Products')->group(function 
             Route::middleware(['permission:add_products'])->group(function () {
                 Route::post('/attributes','storeAttribute');
                 Route::post('/attribute-values','storeAttributeValue');
-                Route::post('/variants','storeVariant');
-                                        // إضافة منتج
+                Route::post('/variants','storeVariant');// إضافة منتج
             });
         });
 
         Route::controller(empProductController::class)->group(function () {
-             Route::get('/showAttributes', 'getAllAttributes'); 
+             Route::get('/showAttributes', 'getAllAttributes');
             Route::middleware(['permission:add_products'])->group(function () {
                 Route::post('/', 'store');                                                           // إضافة منتج
                 Route::post('/{id}/add-photos', 'addPhotos');                                        // رفع صور
                 Route::put('/{id}/main-photo', 'setMainPhoto');                                      // تحديد صورة رئيسية
             });
             Route::middleware(['permission:view_products'])->group(function () {
-                Route::get('/', 'index');                                                           // عرض قائمة المنتجات
+                Route::get('/', 'index');
+                Route::get('/p', 'indexp');                                                           // عرض قائمة المنتجات
                 Route::get('/{id}', 'show');                                                        // عرض منتج مفرد
                 Route::get('/showBarcode/{id}', 'showBarcode');
-                                 // عرض باركود منتج
+                // عرض باركود منتج
 
             });
             Route::middleware(['permission:edit_products'])->group(function () {
@@ -155,7 +156,38 @@ Route::controller(ProductController::class)->prefix('Products')->group(function 
                 // });
             });
         });
+        Route::middleware(['permission:view_orders','permission:edit_orders'])
+    ->group(function () {
+        Route::controller(EmpConfirmOrderController::class)->group(function () {
+
+            // GET الموظف يسحب Order
+            Route::get('/confirm-order', 'workorganization');
+
+            // POST تسجيل محاولة (واتساب / كول)
+            Route::post('/logattempt', 'logAttempt');
+
+            // POST إنتهاء تأكيد الطلب
+            Route::post('/end-confirmation', 'endConfirmation');
+        });
+    });
+
         Route::prefix('orders')->controller(EmpOrderController::class)->group(function () {
+                    Route::middleware(['permission:view_orders','permission:edit_orders'])
+    ->group(function () {
+        Route::controller(EmpConfirmOrderController::class)->group(function () {
+
+            // GET الموظف يسحب Order
+            Route::get('/Confirmation', 'workorganization');
+
+            // POST تسجيل محاولة (واتساب / كول)
+            Route::post('/logattempt', 'logAttempt');
+
+            // POST إنتهاء تأكيد الطلب
+            Route::post('/end-confirmation', 'endConfirmation');
+        });
+    });
+
+
             Route::middleware(['permission:add_orders'])->group(function () {
                 Route::post('/guest-order','createOrderForGuest');                              // إنشاء طلب للزائر
                 Route::post('/existing-user-order','createOrderForExistingUser');               // إنشاء طلب لمستخدم مسجل
@@ -165,6 +197,7 @@ Route::controller(ProductController::class)->prefix('Products')->group(function 
                 Route::get('/{id}', 'show');                                                    // عرض طلب مفرد
                 Route::get('/filter', 'filter');                                                // فلترة الطلبات
                 Route::post('/check-phone','checkPhoneNumber');                                 // التحقق من رقم الهاتف
+
             });
             Route::middleware(['permission:edit_orders'])->group(function () {
                 Route::put('/{id}/status', 'updateStatus');                                     // تحديث حالة الطلب

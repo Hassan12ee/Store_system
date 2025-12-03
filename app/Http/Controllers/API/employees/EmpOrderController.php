@@ -118,47 +118,47 @@ class EmpOrderController extends Controller
         ]);
     }
 
-    // فلترة متقدمة: حسب التاريخ أو العميل
-    public function filter(Request $request)
-    {
-        $query = Order::with(['details.product', 'address','address.governorate','address.city', 'customer']);
+    // // فلترة متقدمة: حسب التاريخ أو العميل
+    // public function filter(Request $request)
+    // {
+    //     $query = Order::with(['details.product', 'address','address.governorate','address.city', 'customer']);
 
-        if ($request->filled('customer_id')) {
-            $query->where('customer_id', $request->customer_id);
-        }
+    //     if ($request->filled('customer_id')) {
+    //         $query->where('customer_id', $request->customer_id);
+    //     }
 
-        if ($request->filled('from_date')) {
-            $query->whereDate('order_date', '>=', $request->from_date);
-        }
+    //     if ($request->filled('from_date')) {
+    //         $query->whereDate('order_date', '>=', $request->from_date);
+    //     }
 
-        if ($request->filled('to_date')) {
-            $query->whereDate('order_date', '<=', $request->to_date);
-        }
+    //     if ($request->filled('to_date')) {
+    //         $query->whereDate('order_date', '<=', $request->to_date);
+    //     }
 
-        $orders = $query->orderBy('order_date', 'desc')
-                        ->paginate($request->get('per_page', 10));
+    //     $orders = $query->orderBy('order_date', 'desc')
+    //                     ->paginate($request->get('per_page', 10));
 
-        return response()->json([
-            'status' => true,
-            'current_page' => $orders->currentPage(),
-            'per_page' => $orders->perPage(),
-            'total' => $orders->total(),
-            'last_page' => $orders->lastPage(),
-            'next_page_url' => $orders->nextPageUrl(),
-            'prev_page_url' => $orders->previousPageUrl(),
-            'data' => $orders->map(function ($order) {
-                return [
-                    'id' => $order->id,
-                    'order_id' => $order->order_id,
-                    'status' => $order->status,
-                    'order_date' => $order->order_date,
-                    'customer_name' => optional($order->customer)->name,
-                    'total_items' => $order->details->sum('quantity'),
-                    'created_at' => $order->created_at,
-                ];
-            }),
-        ]);
-    }
+    //     return response()->json([
+    //         'status' => true,
+    //         'current_page' => $orders->currentPage(),
+    //         'per_page' => $orders->perPage(),
+    //         'total' => $orders->total(),
+    //         'last_page' => $orders->lastPage(),
+    //         'next_page_url' => $orders->nextPageUrl(),
+    //         'prev_page_url' => $orders->previousPageUrl(),
+    //         'data' => $orders->map(function ($order) {
+    //             return [
+    //                 'id' => $order->id,
+    //                 'order_id' => $order->order_id,
+    //                 'status' => $order->status,
+    //                 'order_date' => $order->order_date,
+    //                 'customer_name' => optional($order->customer)->name,
+    //                 'total_items' => $order->details->sum('quantity'),
+    //                 'created_at' => $order->created_at,
+    //             ];
+    //         }),
+    //     ]);
+    // }
 
     // تحديث حالة الطلب
     public function updateStatus(Request $request, $id)
@@ -167,7 +167,7 @@ class EmpOrderController extends Controller
             abort(403, 'Unauthorized action.');
         }
         $request->validate([
-            'status' => 'required|in:ordered,confirmed,packing,shipped_to_carrier,out_for_delivery,delivered,cancelled',
+            'status' => 'required|in:pending_confirmation,being_confirmed,not_confirmed,confirmed,packing,shipped_to_carrier,out_for_delivery,delivered,cancelled',
         ]);
 
         $order = Order::findOrFail($id);
@@ -381,146 +381,157 @@ class EmpOrderController extends Controller
     // أو تعديل بيانات الطلب بشكل عام
 
 
-public function updateOrder(Request $request, $id)
-{
-    $validated = $request->validate([
-        'status' => 'nullable|string|in:ordered,confirmed,packing,shipped_to_carrier,out_for_delivery,delivered,cancelled',
-        'address_id' => 'required_with:address|exists:addresses,id',
-        'customer' => 'nullable|array',
-        'customer.id' => 'required_with:customer|exists:Users,id',
-        'customer.FristName' => 'nullable|string',
-        'customer.LastName' => 'nullable|string',
-        'customer.email' => 'nullable|email',
-        'customer.Phone' => 'nullable|string',
-        'items' => 'array',
-        'items.*.id' => 'nullable|integer', // order_details.id
-        'items.*.product_id' => 'nullable|integer|exists:product_variants,id',
-        'items.*.quantity' => 'nullable|integer|min:1',
-        'items.*.price' => 'nullable|numeric|min:0',
-    ]);
+    public function updateOrder(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'status' => 'nullable|string|in:pending_confirmation,not_confirmed,being_confirmed,confirmed,packing,shipped_to_carrier,out_for_delivery,delivered,cancelled',
+            'address_id' => 'required_with:address|exists:addresses,id',
+            'customer' => 'nullable|array',
+            'customer.id' => 'required_with:customer|exists:Users,id',
+            'customer.FristName' => 'nullable|string',
+            'customer.LastName' => 'nullable|string',
+            'customer.email' => 'nullable|email',
+            'customer.Phone' => 'nullable|string',
+            'items' => 'array',
+            'items.*.id' => 'nullable|integer', // order_details.id
+            'items.*.product_id' => 'nullable|integer|exists:product_variants,id',
+            'items.*.quantity' => 'nullable|integer|min:1',
+            'items.*.price' => 'nullable|numeric|min:0',
+        ]);
 
-    DB::beginTransaction();
+        DB::beginTransaction();
 
-    try {
-        $order = Order::with(['details', 'customer', 'address'])->findOrFail($id);
-         // تحديث حالة الطلب
-    if (isset($validated['status'])) {
-        $order->status = $validated['status'];
-    }
-    $order->save();
-
-    // تحديث بيانات العنوان
-    if (!empty($validated['address_id'])) {
-        $address = $order->address_id;
-        if ($address != $validated['address_id']) {
-            $order->address_id = $validated['address_id'];
-            $order->save();
+        try {
+            $order = Order::with(['details', 'customer', 'address'])->findOrFail($id);
+            // تحديث حالة الطلب
+        if (isset($validated['status'])) {
+            $order->status = $validated['status'];
         }
-    }
+        $order->save();
 
-    // تحديث بيانات العميل
-    if (!empty($validated['customer'])) {
-        $customer = $order->customer;
-        if ($customer) {
-            $customer->update(array_filter([
-                'FristName' => $validated['customer']['FristName'] ?? null,
-                'LastName' => $validated['customer']['LastName'] ?? null,
-                'email' => $validated['customer']['email'] ?? null,
-                'Phone' => $validated['customer']['Phone'] ?? null,
-            ]));
+        // تحديث بيانات العنوان
+        if (!empty($validated['address_id'])) {
+            $address = $order->address_id;
+            if ($address != $validated['address_id']) {
+                $order->address_id = $validated['address_id'];
+                $order->save();
+            }
         }
-    }
+
+        // تحديث بيانات العميل
+        if (!empty($validated['customer'])) {
+            $customer = $order->customer;
+            if ($customer) {
+                $customer->update(array_filter([
+                    'FristName' => $validated['customer']['FristName'] ?? null,
+                    'LastName' => $validated['customer']['LastName'] ?? null,
+                    'email' => $validated['customer']['email'] ?? null,
+                    'Phone' => $validated['customer']['Phone'] ?? null,
+                ]));
+            }
+        }
 
 
-        foreach ($validated['items'] as $item) {
+            foreach ($validated['items'] as $item) {
 
-            // ✏ تعديل منتج موجود
-            if (!empty($item['id'])) {
-                $detail = $order->details()->where('id', $item['id'])->first();
-                if ($detail) {
-                    $product = ProductVariant::findOrFail($item['product_id']);
-                    $oldQty = $detail->quantity;
-                    $newQty = $item['quantity'];
-                    $diff = $newQty - $oldQty;
+                // ✏ تعديل منتج موجود
+                if (!empty($item['id'])) {
+                    $detail = $order->details()->where('id', $item['id'])->first();
+                    if ($detail) {
+                        $product = ProductVariant::findOrFail($item['product_id']);
+                        $oldQty = $detail->quantity;
+                        $newQty = $item['quantity'];
+                        $diff = $newQty - $oldQty;
 
 
-                 if ($diff > 0) {
-                        if ($product->quantity < $diff) {
-                            throw new \Exception("Not enough stock for {$product->name}");
+                    if ($diff > 0) {
+                            if ($product->quantity < $diff) {
+                                throw new \Exception("Not enough stock for {$product->name}");
+                            }
+                            $product->quantity -= $diff; // خصم الكمية الجديدة
+                            $order->total_price += $item['price'] * $diff;
+                            $order->save();
+
+                        } elseif ($diff < 0) {
+                            $product->quantity += abs($diff); // رجع الكمية القديمة
+                            $order->total_price -= $item['price'] * abs($diff);
+                            $order->save();
                         }
-                        $product->quantity -= $diff; // خصم الكمية الجديدة
-                    } elseif ($diff < 0) {
-                        $product->quantity += abs($diff); // رجع الكمية القديمة
+                        $product->save();
+                        // تحديث السعر الإجمالي للطلب
+
+
+                        $detail->update([
+                            'product_id' => $item['product_id'],
+                            'quantity' => $newQty,
+                            'price' => $item['price'],
+                        ]);
                     }
+                }
+
+                // ➕ إضافة منتج جديد
+                else {
+                    $product = ProductVariant::findOrFail($item['product_id']);
+                    if ($product->quantity < $item['quantity']) {
+                        throw new \Exception("Not enough stock for {$product->name}");
+                    }
+                    $product->quantity -= $item['quantity'];
                     $product->save();
-                    $detail->update([
+                    $order->total_price += $item['price'] * $item['quantity'];
+                    $order->save();
+
+                    $order->details()->create([
                         'product_id' => $item['product_id'],
-                        'quantity' => $newQty,
+                        'quantity' => $item['quantity'],
                         'price' => $item['price'],
                     ]);
                 }
             }
 
-            // ➕ إضافة منتج جديد
-            else {
-                $product = ProductVariant::findOrFail($item['product_id']);
-                if ($product->quantity < $item['quantity']) {
-                    throw new \Exception("Not enough stock for {$product->name}");
-                }
-                $product->quantity -= $item['quantity'];
-                $product->save();
+            DB::commit();
 
-                $order->details()->create([
-                    'product_id' => $item['product_id'],
-                    'quantity' => $item['quantity'],
-                    'price' => $item['price'],
-                ]);
-            }
+            return response()->json([
+                'status' => true,
+                'message' => 'Order updated successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 400);
         }
-
-        DB::commit();
-
-        return response()->json([
-            'status' => true,
-            'message' => 'Order updated successfully'
-        ]);
-
-    } catch (\Exception $e) {
-        DB::rollBack();
-        return response()->json([
-            'status' => false,
-            'message' => $e->getMessage()
-        ], 400);
     }
-}
-public function deleteProductFromOrder($detailId)
-{
-    DB::beginTransaction();
+    public function deleteProductFromOrder($detailId)
+    {
+        DB::beginTransaction();
 
-    try {
-        $detail = OrderDetail::findOrFail($detailId);
-        // استرجاع الكمية للمخزون
-        $product = ProductVariant::findOrFail($detail->product_id);
-        $product->quantity += $detail->quantity;
-        $product->save();
+        try {
+            $detail = OrderDetail::findOrFail($detailId);
+            // استرجاع الكمية للمخزون
+            $product = ProductVariant::findOrFail($detail->product_id);
+            $product->quantity += $detail->quantity;
+            $product->save();
+            $detail->order->total_price -= $detail->price * $detail->quantity;
+            $detail->order->save();
+            // حذف تفاصيل الطلب
+            $detail->delete();
 
-        // حذف تفاصيل الطلب
-        $detail->delete();
+            DB::commit();
 
-        DB::commit();
+            return response()->json([
+                'status' => true,
+                'message' => 'Product removed from order successfully'
+            ]);
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Product removed from order successfully'
-        ]);
-
-    } catch (\Exception $e) {
-        DB::rollBack();
-        return response()->json([
-            'status' => false,
-            'message' => $e->getMessage()
-        ], 400);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 400);
+        }
     }
-}
 
 }

@@ -22,7 +22,14 @@ class empProductController extends Controller
 {
     //
     use ApiResponseTrait;
+    protected function generateUniqueBarcode()
+    {
+        do {
+            $barcode = 'P-' . strtoupper(Str::random(8)); // مثل: P-9X8Y2Z1Q
+        } while (ProductVariant::where('barcode', $barcode)->exists());
 
+        return $barcode;
+    }
     public function getAllAttributes()
     {
             //     $attributes = Attribute::with('values')->get();
@@ -102,7 +109,7 @@ class empProductController extends Controller
             // 5️⃣ إنشاء المتغير
             $variant = ProductVariant::create([
                 'product_id' => $product->id,
-                'sku_Ar'        => $request->sku ?? null,
+                'sku_Ar'        => $request->sku_Ar ?? null,
                 'sku_En'        => $request->sku_En ?? null,
                 'price'      => $request->price,
                 'quantity'   => $request->quantity,
@@ -145,14 +152,7 @@ class empProductController extends Controller
 
     // توليد باركود فريد
     // هذا الدالة تولد باركود فريد لكل منتج
-    protected function generateUniqueBarcode()
-    {
-        do {
-            $barcode = 'P-' . strtoupper(Str::random(8)); // مثل: P-9X8Y2Z1Q
-        } while (Product::where('barcode', $barcode)->exists());
 
-        return $barcode;
-    }
 
 
     public function showBarcode($barcode)
@@ -383,10 +383,10 @@ class empProductController extends Controller
     // هذا الدالة تعرض تفاصيل منتج معين بما في ذلك الخصائص والقيم
     public function show($id)
     {
-            $product = ProductVariant::with([
-                'Product', // القيم والـ attributes المرتبطة
-                'Product.brand',
-                'Product.category'
+            $product = Product::with([
+                'variants', // القيم والـ attributes المرتبطة
+                'brand',
+                'category'
             ])->find($id);
 
             if (!$product) {
@@ -395,42 +395,47 @@ class empProductController extends Controller
 
             return $this->apiResponse([
                 'product'       => [
-                    'sku_id'       => $product->id,
-                    'product_id'             => $product->product->id,
-                    'name_Ar'           => $product->product->name_Ar,
-                    'name_En'           => $product->product->name_En,
-                    'sku_Ar'      => $product->sku_Ar,
-                    'sku_En'      => $product->sku_En,
-                    'Photos' => collect($product->product->Photos)->map(fn($photo) => asset($photo)),
-                    'main_photo'     => $product->product->main_photo ? asset($product->main_photo) : null,
-                    'photo'    => $product->photo ? asset($variant->photo) : null,
-                    'price'    => $product->price,
-                    'quantity' => $product->quantity,
-                    'warehouse_qty'  => $product->warehouse_quantity,
-                    'specifications' => $product->product->specifications,
-                    'dimensions'     => $product->dimensions,
-                    'warehouse_id'   => $product->warehouse_id,
-                    'barcode'        => $this->generateBarcodeBase64($product->barcode) ?? null,
-                    'values_with_attributes' => $product->values->map(function ($value) {
+                    'product_id'       => $product->id,
+                    'name_Ar'           => $product->name_Ar,
+                    'name_En'           => $product->name_En,
+                    'Photos' => collect($product->Photos)->map(fn($photo) => asset($photo)),
+                    'main_photo'     => $product->main_photo ? asset($product->main_photo) : null,
+                    'specifications' => $product->specifications,
+                    'variants' => $product->variants->map(function ($variant) {
                         return [
-                            'value_id' => $value->id,
-                            'attribute_id' => $value->attribute->id,
-                            'attribute_name' => $value->attribute->name,
-                            'value' => $value->value,
-                            ];
+                            'id' => $variant->id,
+                            'sku_Ar' => $variant->sku_Ar,
+                            'sku_En' => $variant->sku_En,
+                            'price' => $variant->price,
+                            'quantity' => $variant->quantity,
+                            'dimensions' => $variant->dimensions,
+                            'weight' => $variant->weight,
+                            'warehouse_id' => $variant->warehouse_id,
+                            'warehouse_quantity' => $variant->warehouse_quantity,
+                            'photo' => $variant->photo ? asset($variant->photo) : null,
+                            'barcode' => $this->generateBarcodeBase64($variant->barcode) ?? null,
+                            'values_with_attributes' => $variant->values->map(function ($value) {
+                                return [
+                                    'value_id' => $value->id,
+                                    'attribute_id' => $value->attribute->id,
+                                    'attribute_name' => $value->attribute->name,
+                                    'value' => $value->value,
+                                ];
+                            }),
+                        ];
                     }),
-                    'brand' => $product->product->brand ? [
-                        'id' => $product->product->brand->id,
-                        'name' => $product->product->brand->name,
-                        'logo' => $product->product->brand->logo ? asset($product->product->brand->logo) : null,
+                    'brand' => $product->brand ? [
+                        'id' => $product->brand->id,
+                        'name' => $product->brand->name,
+                        'logo' => $product->brand->logo ? asset($product->brand->logo) : null,
                     ] : null,
                     'category' => $product->category ? [
-                        'id' => $product->product->category->id,
-                        'name' => $product->product->category->name,
-                        'image' => $product->product->category->image ? asset($product->product->category->image) : null,
+                        'id' => $product->category->id,
+                        'name' => $product->category->name,
+                        'image' => $product->category->image ? asset($product->category->image) : null,
                     ] : null,
-                    'created_at'     => $product->product->created_at,
-                    'updated_at'     => $product->product->updated_at,
+                    'created_at'     => $product->created_at,
+                    'updated_at'     => $product->updated_at,
 
                     ],
 
@@ -563,4 +568,76 @@ class empProductController extends Controller
         return $this->apiResponse($data, 'Product list retrieved successfully', 200);
     }
 
+        public function indexp(Request $request)
+    {
+        $perPage       = $request->query('per_page', 10);
+        $search        = $request->query('search');
+        $sortBy        = $request->query('sort_by', 'created_at');
+        $sortDirection = $request->query('sort_direction', 'desc');
+        $category     = $request->query('category');
+        $brand     = $request->query('brand');
+
+
+        $query = Product::with([
+            'variants',
+            'brand',
+            'category',
+        ]);
+
+        if ($search) {
+            $query->where('name_Ar', 'like', "%{$search}%")
+              ->orWhere('name_En', 'like', "%{$search}%")
+              ->orWhereHas('variants', function ($variantQuery) use ($search) {
+                  $variantQuery->where('sku_Ar', 'like', "%{$search}%")
+                               ->orWhere('sku_En', 'like', "%{$search}%");
+              });
+        }
+
+        if ($category) {
+            $query->where('category_id', $category);
+        }
+        if ($brand) {
+            $query->where('brand_id', $brand);
+        }
+
+
+        if (in_array($sortBy, ['name_Ar','name_En', 'created_at']) && in_array($sortDirection, ['asc', 'desc'])) {
+            $query->orderBy($sortBy, $sortDirection);
+        }
+
+        $products = $query->paginate($perPage);
+
+        $data = [
+            'current_page'   => $products->currentPage(),
+            'per_page'       => $products->perPage(),
+            'total'          => $products->total(),
+            'last_page'      => $products->lastPage(),
+            'next_page_url'  => $products->nextPageUrl(),
+            'prev_page_url'  => $products->previousPageUrl(),
+            'products'       => $products->map(function ($product) {
+                return [
+                    'sku_id'       => $product->id,
+                    'product_id'             => $product->id,
+                    'name_Ar'           => $product->name_Ar,
+                    'name_En'           => $product->name_En,
+                    'main_photo'     => $product->main_photo ? asset($product->main_photo) : null,
+                    'brand' => $product->brand ? [
+                        'id' => $product->brand->id,
+                        'name' => $product->brand->name,
+                        'logo' => $product->brand->logo ? asset($product->brand->logo) : null,
+                    ] : null,
+                    'category' => $product->category ? [
+                        'id' => $product->category->id,
+                        'name' => $product->category->name,
+                        'image' => $product->category->image ? asset($product->category->image) : null,
+                    ] : null,
+                    'created_at'     => $product->created_at,
+                    'updated_at'     => $product->updated_at,
+
+                ];
+            }),
+        ];
+
+        return $this->apiResponse($data, 'Product list retrieved successfully', 200);
+    }
 }
