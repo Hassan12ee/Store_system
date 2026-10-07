@@ -70,7 +70,7 @@ class OrderController extends Controller
         }
 
 
-        // 🛒 جلب الكارت
+        //  جلب الكارت
         $cartItems = $isGuest
             ? Cart::where('guest_id', $request->guest_id)->get()
             : Cart::where('user_id', $user->id)->get();

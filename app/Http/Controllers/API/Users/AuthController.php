@@ -211,14 +211,14 @@ class AuthController extends Controller
                 'guest_id' => null,
             ]);
 
-        // 💖 نقل الويشلست من الجيست إلى اليوزر
+        //  نقل الويشلست من الجيست إلى اليوزر
         Wishlist::where('guest_id', $guestId)
             ->update([
                 'user_id' => $userId,
                 'guest_id' => null,
             ]);
 
-        // 🧾 لو عندك ReservedQuantity كمان
+        //  لو عندك ReservedQuantity كمان
         ReservedQuantity::where('guest_id', $guestId)
             ->update([
                 'user_id' => $userId,
@@ -246,7 +246,7 @@ class AuthController extends Controller
             return response()->json(['error' => 'User not found'], 404);
         }
 
-        // ✅ دمج بيانات الجيست لو أرسلها من الواجهة (guest_id)
+        
         if ($request->filled('guest_id')) {
             $this->mergeGuestDataToUser($request->guest_id, $user->id);
         }
